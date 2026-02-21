@@ -1,39 +1,108 @@
+/* ===================================== */
 /* Reset */
+/* ===================================== */
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-/* Fullscreen background */
+/* ===================================== */
+/* 💎 Premium Aurora Background */
+/* ===================================== */
+
 .login-container {
+  position: relative;
   min-height: 100vh;
   width: 100vw;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0f172a;
 }
 
-/* Card */
+/* Aurora Layer 1 */
+.login-container::before {
+  content: "";
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  top: -25%;
+  left: -25%;
+  background: radial-gradient(circle at 30% 30%, #6366f1 0%, transparent 40%),
+              radial-gradient(circle at 70% 60%, #8b5cf6 0%, transparent 40%),
+              radial-gradient(circle at 50% 80%, #06b6d4 0%, transparent 40%);
+  animation: auroraMove 20s ease-in-out infinite alternate;
+  filter: blur(120px);
+  opacity: 0.7;
+  z-index: 1;
+}
+
+/* Aurora Layer 2 */
+.login-container::after {
+  content: "";
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  top: -25%;
+  left: -25%;
+  background: radial-gradient(circle at 60% 20%, #ec4899 0%, transparent 35%),
+              radial-gradient(circle at 20% 70%, #3b82f6 0%, transparent 35%);
+  animation: auroraMoveReverse 25s ease-in-out infinite alternate;
+  filter: blur(140px);
+  opacity: 0.6;
+  z-index: 1;
+}
+
+@keyframes auroraMove {
+  0%   { transform: rotate(0deg) translate(0px, 0px); }
+  100% { transform: rotate(20deg) translate(-60px, 40px); }
+}
+
+@keyframes auroraMoveReverse {
+  0%   { transform: rotate(0deg) translate(0px, 0px); }
+  100% { transform: rotate(-25deg) translate(60px, -40px); }
+}
+
+/* ===================================== */
+/* 💎 Glass Card */
+/* ===================================== */
+
 .login-card {
+  position: relative;
+  z-index: 10;
   width: 100%;
   max-width: 420px;
-  background: #ffffff;
-  padding: 35px;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+  padding: 2.8rem 2.2rem;
+  border-radius: 20px;
+
+  backdrop-filter: blur(30px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+
   text-align: center;
 }
 
 /* Title */
 .login-title {
-  font-size: 26px;
+  font-size: 28px;
   margin-bottom: 25px;
-  color: #222;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
+/* ===================================== */
 /* Form */
+/* ===================================== */
+
 .login-form {
   display: flex;
   flex-direction: column;
@@ -50,38 +119,53 @@
 .input-group label {
   font-size: 14px;
   margin-bottom: 6px;
-  color: #555;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .input-group input {
   padding: 12px 14px;
   font-size: 14px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  backdrop-filter: blur(10px);
   transition: 0.3s ease;
 }
 
 .input-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  border-color: #6366f1;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
 }
 
-/* Button */
+/* ===================================== */
+/* 🔘 Button */
+/* ===================================== */
+
 .login-btn {
   margin-top: 10px;
   padding: 14px;
   font-size: 16px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: 12px;
   border: none;
   cursor: pointer;
-  color: #fff;
-  background: linear-gradient(135deg, #667eea, #5a67d8);
+  color: white;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   transition: all 0.3s ease;
 }
 
 .login-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.18);
+  transform: translateY(-3px);
+  box-shadow: 0 15px 40px rgba(99, 102, 241, 0.5);
+}
+.error-message {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fecaca;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  text-align: center;
 }

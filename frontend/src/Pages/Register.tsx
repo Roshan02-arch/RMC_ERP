@@ -1,5 +1,6 @@
 import { useState, FormEvent } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import "../Css/Register.css";
 
 interface RegisterFormData {
@@ -10,62 +11,119 @@ interface RegisterFormData {
 }
 
 function Register() {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState<RegisterFormData>({
     name: "",
     email: "",
     number: "",
     password: "",
   });
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-
-    if (errorMsg || successMsg) {
-      setErrorMsg(null);
-      setSuccessMsg(null);
-    }
+    setErrorMsg(null);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (formData.password.length < 6) {
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+    const number = formData.number.trim();
+    const password = formData.password;
+
+    // 🔹 Name Validation
+    if (!name) {
+      setErrorMsg("Full Name is required");
+      return;
+    }
+
+    if (name.length < 3) {
+      setErrorMsg("Name must be at least 3 characters long");
+      return;
+    }
+
+    if (!/^[A-Za-z ]+$/.test(name)) {
+      setErrorMsg("Name should contain only letters and spaces");
+      return;
+    }
+
+    // 🔹 Email Validation
+    if (!email) {
+      setErrorMsg("Email is required");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErrorMsg("Please enter a valid email address");
+      return;
+    }
+
+    // 🔹 Mobile Validation
+    if (!number) {
+      setErrorMsg("Mobile number is required");
+      return;
+    }
+
+    if (!/^[6-9]\d{9}$/.test(number)) {
+      setErrorMsg("Enter valid 10-digit Indian mobile number");
+      return;
+    }
+
+    // 🔹 Password Validation
+    if (!password) {
+      setErrorMsg("Password is required");
+      return;
+    }
+
+    if (password.length < 6) {
       setErrorMsg("Password must be at least 6 characters long");
       return;
     }
-    if (!/^[6-9]\d{9}$/.test(formData.number)) {
-      setErrorMsg("Please enter a valid 10-digit Indian mobile number");
+
+    if (!/(?=.*[A-Z])/.test(password)) {
+      setErrorMsg("Password must contain at least one uppercase letter");
+      return;
+    }
+
+    if (!/(?=.*[0-9])/.test(password)) {
+      setErrorMsg("Password must contain at least one number");
       return;
     }
 
     setLoading(true);
     setErrorMsg(null);
-    setSuccessMsg(null);
 
     try {
-      const response = await axios.post(
+      await axios.post(
         "http://localhost:8080/api/users/register",
-        formData,
+        { name, email, number, password },
         { headers: { "Content-Type": "application/json" } }
       );
 
-      setSuccessMsg(response.data?.message || "Account created successfully!");
+      alert("Account created successfully! Redirecting to Login...");
+      navigate("/login");
 
-      setFormData({ name: "", email: "", number: "", password: "" });
     } catch (error: any) {
-      const errMsg =
-        error.response?.data?.message ||
-        error.response?.data ||
-        error.message ||
-        "Registration failed. Please try again.";
-      setErrorMsg(errMsg);
-    } finally {
+
+        let errMsg = "Registration failed";
+
+        if (error.response?.data?.message) {
+          errMsg = error.response.data.message;
+        }
+
+        if (errMsg === "User already exists") {
+          alert("User already exists");
+        } else {
+          setErrorMsg(errMsg);
+        }
       setLoading(false);
-    }
+      }
   };
 
   return (
@@ -73,81 +131,73 @@ function Register() {
       <div className="card">
         <h2>Create Your Account</h2>
 
-        {successMsg && <div className="success-message">{successMsg}</div>}
         {errorMsg && <div className="error-message">{errorMsg}</div>}
 
         <form onSubmit={handleSubmit} noValidate>
+
           <div className="input-group">
             <input
               type="text"
               name="name"
-              id="name"
               placeholder=" "
               value={formData.name}
               onChange={handleChange}
               required
-              autoComplete="name"
             />
-            <label htmlFor="name">Full Name</label>
+            <label>Full Name</label>
           </div>
 
           <div className="input-group">
             <input
               type="email"
               name="email"
-              id="email"
               placeholder=" "
               value={formData.email}
               onChange={handleChange}
               required
-              autoComplete="email"
             />
-            <label htmlFor="email">Email Address</label>
+            <label>Email Address</label>
           </div>
 
           <div className="input-group">
             <input
               type="tel"
               name="number"
-              id="number"
               placeholder=" "
               value={formData.number}
               onChange={handleChange}
               required
-              pattern="[6-9][0-9]{9}"
               maxLength={10}
-              autoComplete="tel"
             />
-            <label htmlFor="number">Mobile Number</label>
+            <label>Mobile Number</label>
           </div>
 
           <div className="input-group">
             <input
               type="password"
               name="password"
-              id="password"
               placeholder=" "
               value={formData.password}
               onChange={handleChange}
               required
               minLength={6}
-              autoComplete="new-password"
             />
-            <label htmlFor="password">Password</label>
+            <label>Password</label>
           </div>
 
           <button type="submit" disabled={loading}>
             {loading ? "Creating Account..." : "Create Account"}
           </button>
+
         </form>
 
-        {/* Professional login section at bottom */}
         <div className="auth-footer">
           <p>Already have an account?</p>
           <a href="/login" className="login-link">
             Sign in
           </a>
         </div>
+
       </div>
     </div>
   );

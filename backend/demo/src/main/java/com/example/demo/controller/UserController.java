@@ -1,6 +1,10 @@
 package com.example.demo.controller;
 
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import com.example.demo.entity.User;
@@ -15,10 +19,33 @@ public class UserController {
     private UserRepository userRepository;
 
     @PostMapping("/register")
-    public String registerUser(@RequestBody User user) {
+    public ResponseEntity<?> registerUser(@RequestBody User user) {
 
-        userRepository.save(user);
+        try {
 
-        return "User registered successfully!";
+            // 🔹 Manual duplicate check
+            if (userRepository.existsByEmail(user.getEmail()) ||
+                    userRepository.existsByNumber(user.getNumber())) {
+
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "User already exists"));
+            }
+
+            userRepository.save(user);
+
+            return ResponseEntity.ok(
+                    Map.of("message", "User registered successfully!")
+            );
+
+        } catch (DataIntegrityViolationException ex) {
+
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "User already exists"));
+
+        } catch (Exception ex) {
+
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("message", "Something went wrong"));
+        }
     }
 }
