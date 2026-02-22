@@ -1,12 +1,1 @@
-/* Remove default browser spacing */
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-/* Remove default Vite layout */
-body {
-  display: block;
-}
+@import "tailwindcss";

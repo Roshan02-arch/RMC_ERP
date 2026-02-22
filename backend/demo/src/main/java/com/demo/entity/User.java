@@ -1,4 +1,4 @@
-package com.example.demo.entity;
+package com.demo.entity;
 
 import jakarta.persistence.*;
 
@@ -13,7 +13,9 @@ public class User {
     private String name;
     private String email;
     private String number;
+    private String address;
     private String password;
+    private String role;  // ADMIN or CUSTOMER
 
     public User() {}
 
@@ -28,6 +30,22 @@ public class User {
     public String getNumber() { return number; }
     public void setNumber(String number) { this.number = number; }
 
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
 }
