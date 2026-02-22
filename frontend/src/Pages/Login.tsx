@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import "../Css/Login.css";
 
 const Login = () => {
@@ -8,7 +9,7 @@ const Login = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const trimmedEmail = email.trim();
@@ -16,52 +17,42 @@ const Login = () => {
 
     setErrorMsg(null);
 
-    // 🔹 Email Required
     if (!trimmedEmail) {
       setErrorMsg("Email is required");
       return;
     }
 
-    // 🔹 Valid Email Format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setErrorMsg("Please enter a valid email address");
-      return;
-    }
-
-    // 🔹 Password Required
     if (!trimmedPassword) {
       setErrorMsg("Password is required");
       return;
     }
 
-    // 🔹 Strong Password Rules
-    if (trimmedPassword.length < 6) {
-      setErrorMsg("Password must be at least 6 characters long");
-      return;
-    }
-
-    if (!/(?=.*[A-Z])/.test(trimmedPassword)) {
-      setErrorMsg("Password must contain at least one uppercase letter");
-      return;
-    }
-
-    if (!/(?=.*[0-9])/.test(trimmedPassword)) {
-      setErrorMsg("Password must contain at least one number");
-      return;
-    }
-
     setLoading(true);
 
-    // Simulate login process
-    setTimeout(() => {
-      console.log("Login Data:", {
-        email: trimmedEmail,
-        password: trimmedPassword,
+    try {
+      const response = await fetch("http://localhost:8080/api/users/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          password: trimmedPassword,
+        }),
       });
 
-      alert("Login Successful 🎉");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message);
+      }
+
+      alert(data.message); // Login successful
+    } catch (error: any) {
+      setErrorMsg(error.message || "Login failed");
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   };
 
   return (
@@ -69,12 +60,9 @@ const Login = () => {
       <div className="login-card">
         <h2 className="login-title">RMC ERP Login</h2>
 
-        {errorMsg && (
-          <div className="error-message">{errorMsg}</div>
-        )}
+        {errorMsg && <div className="error-message">{errorMsg}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
-
           <div className="input-group">
             <label>Email</label>
             <input
@@ -105,6 +93,13 @@ const Login = () => {
             {loading ? "Logging in..." : "Login"}
           </button>
 
+          {/* ✅ Create Account link */}
+          <div className="create-account">
+            <span>Don&apos;t have an account? </span>
+            <Link to="/register" className="create-link">
+              Create account
+            </Link>
+          </div>
         </form>
       </div>
     </div>
