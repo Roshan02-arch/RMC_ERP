@@ -1,14 +1,16 @@
-package com.example.demo.controller;
+package com.demo.controller;
 
 import java.util.Map;
+import java.util.Optional;
+import com.demo.dto.LoginRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.example.demo.entity.User;
-import com.example.demo.repository.UserRepository;
+import com.demo.entity.User;
+import com.demo.repository.UserRepository;
 
 @RestController
 @RequestMapping("/api/users")
@@ -47,5 +49,28 @@ public class UserController {
             return ResponseEntity.internalServerError()
                     .body(Map.of("message", "Something went wrong"));
         }
+    }
+    @PostMapping("/login")
+    public ResponseEntity<?> loginUser(@RequestBody LoginRequest request) {
+
+        Optional<User> user = userRepository.findByEmail(request.getEmail());
+
+        if (user.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "User not found"));
+        }
+
+        if (!user.get().getPassword().equals(request.getPassword())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Invalid password"));
+        }
+
+        return ResponseEntity.ok(
+                Map.of("message", "Login successful")
+        );
+    }
+    @GetMapping("/ping")
+    public String ping() {
+        return "WORKING";
     }
 }
