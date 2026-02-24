@@ -47,7 +47,7 @@ const Login = () => {
         throw new Error(data.message);
       }
 
-      alert(data.message); // Login successful
+      alert(data.message);
     } catch (error: any) {
       setErrorMsg(error.message || "Login failed");
     } finally {
@@ -89,11 +89,15 @@ const Login = () => {
             />
           </div>
 
+          {/* 🔐 Forgot Password Link (Added) */}
+          <div style={{ textAlign: "right", marginBottom: "10px" }}>
+            <Link to="/forgot-password">Forgot Password?</Link>
+          </div>
+
           <button type="submit" className="login-btn" disabled={loading}>
             {loading ? "Logging in..." : "Login"}
           </button>
 
-          {/* ✅ Create Account link */}
           <div className="create-account">
             <span>Don&apos;t have an account? </span>
             <Link to="/register" className="create-link">
