@@ -69,6 +69,39 @@ public class AdminController {
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
+
+    @GetMapping("/admin-logins/pending")
+    public List<User> getPendingAdminLogins() {
+        return userRepository.findByRoleAndApprovalStatus("ADMIN", "PENDING_APPROVAL");
+    }
+
+    @PutMapping("/admin-logins/{userId}/approve")
+    public ResponseEntity<?> approveAdminLogin(@PathVariable Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!"ADMIN".equals(user.getRole())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "User is not an admin"));
+        }
+
+        user.setApprovalStatus("APPROVED");
+        userRepository.save(user);
+        return ResponseEntity.ok(Map.of("message", "Admin approved successfully"));
+    }
+
+    @PutMapping("/admin-logins/{userId}/reject")
+    public ResponseEntity<?> rejectAdminLogin(@PathVariable Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!"ADMIN".equals(user.getRole())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "User is not an admin"));
+        }
+
+        user.setApprovalStatus("REJECTED");
+        userRepository.save(user);
+        return ResponseEntity.ok(Map.of("message", "Admin rejected successfully"));
+    }
     @PutMapping("/orders/{orderId}/approve")
     public ResponseEntity<?> approveOrder(@PathVariable String orderId) {
 

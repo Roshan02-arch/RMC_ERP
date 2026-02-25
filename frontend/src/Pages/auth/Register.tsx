@@ -103,7 +103,7 @@ const [showPassword, setShowPassword] = useState(false);
     setErrorMsg(null);
 
     try {
-      await axios.post(
+      const response = await axios.post(
         "http://localhost:8080/api/users/register",
         {
           name,
@@ -115,7 +115,7 @@ const [showPassword, setShowPassword] = useState(false);
         { headers: { "Content-Type": "application/json" } }
       );
 
-      alert("Account created successfully! Redirecting to Login...");
+      alert(response.data?.message || "Account created successfully! Redirecting to Login...");
       navigate("/login");
 
     } catch (error: unknown) {
@@ -137,10 +137,49 @@ const [showPassword, setShowPassword] = useState(false);
   return (
     <div
       className="relative min-h-screen flex items-center justify-center
-      bg-gradient-to-br from-blue-50 to-blue-100
-      bg-[radial-gradient(circle,_rgba(0,0,0,0.04)_1px,_transparent_1px)]
-      bg-[size:40px_40px] overflow-hidden"
+      bg-gradient-to-br from-sky-100 via-cyan-50 to-indigo-100
+      overflow-hidden"
     >
+      {/* Mesh Pattern */}
+      <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_20%_30%,rgba(59,130,246,0.25),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.28),transparent_35%),radial-gradient(circle_at_70%_80%,rgba(99,102,241,0.22),transparent_40%),radial-gradient(circle_at_10%_85%,rgba(56,189,248,0.2),transparent_35%)]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(15,23,42,0.06)_1px,_transparent_1px)] bg-[size:26px_26px]"></div>
+
+      {/* Glow Blobs */}
+      <div className="absolute -top-16 -left-14 w-72 h-72 rounded-full bg-cyan-300/45 blur-3xl animate-blob"></div>
+      <div
+        className="absolute top-20 -right-20 w-80 h-80 rounded-full bg-indigo-300/45 blur-3xl animate-blob"
+        style={{ animationDelay: "2.2s", animationDuration: "9s" }}
+      ></div>
+      <div
+        className="absolute -bottom-20 left-1/3 w-96 h-96 rounded-full bg-sky-200/55 blur-3xl animate-blob"
+        style={{ animationDelay: "4s", animationDuration: "10s" }}
+      ></div>
+
+      {/* Floating RMC Symbols */}
+      {[
+        "🏗️",
+        "🚚",
+        "🧱",
+        "🏭",
+        "⚙️",
+        "📦",
+        "🛠️",
+        "📐",
+      ].map((symbol, i) => (
+        <div
+          key={`${symbol}-${i}`}
+          className="absolute text-xl text-slate-600/30 animate-float pointer-events-none"
+          style={{
+            top: `${10 + (i % 4) * 22}%`,
+            left: `${8 + i * 11}%`,
+            animationDelay: `${i * 0.6}s`,
+            animationDuration: `${6 + (i % 3)}s`,
+          }}
+        >
+          {symbol}
+        </div>
+      ))}
+
     {/* Top Right Navbar */}
         <div className="absolute top-0 right-0 p-6 flex gap-6 text-sm font-medium text-gray-600">
           <Link to="/" className="hover:text-indigo-600 transition-colors">
@@ -154,8 +193,8 @@ const [showPassword, setShowPassword] = useState(false);
           </Link>
         </div>
       {/* Register Card */}
-      <div className="relative w-full max-w-md bg-white/90 backdrop-blur-sm
-                      shadow-2xl rounded-2xl p-8 border border-gray-100">
+      <div className="relative w-full max-w-md bg-white/88 backdrop-blur-md
+                      shadow-[0_24px_60px_rgba(30,41,59,0.18)] rounded-2xl p-8 border border-white/60">
 
         <h2 className="text-3xl font-bold text-center text-gray-800">
           Create Your Account

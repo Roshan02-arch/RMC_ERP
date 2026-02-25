@@ -38,11 +38,26 @@ public class UserController {
                         .body(Map.of("message", "User already exists"));
             }
 
-            user.setRole("CUSTOMER");
+            String requestedRole = user.getRole() == null ? "CUSTOMER" : user.getRole().toUpperCase();
+            if (!"ADMIN".equals(requestedRole) && !"CUSTOMER".equals(requestedRole)) {
+                requestedRole = "CUSTOMER";
+            }
+
+            user.setRole(requestedRole);
+            if ("ADMIN".equals(requestedRole)) {
+                user.setApprovalStatus("PENDING_APPROVAL");
+            } else {
+                user.setApprovalStatus("APPROVED");
+            }
             userRepository.save(user);
 
             return ResponseEntity.ok(
-                    Map.of("message", "User registered successfully!"));
+                    Map.of(
+                            "message",
+                            "ADMIN".equals(requestedRole)
+                                    ? "Admin account created. Waiting for approval."
+                                    : "User registered successfully!"
+                    ));
 
         } catch (DataIntegrityViolationException ex) {
 
@@ -68,6 +83,12 @@ public class UserController {
         }
 
         String role = user.getRole() != null ? user.getRole() : "CUSTOMER";
+        String approvalStatus = user.getApprovalStatus() == null ? "APPROVED" : user.getApprovalStatus();
+
+        if ("ADMIN".equals(role) && !"APPROVED".equals(approvalStatus)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "Admin account is pending approval"));
+        }
 
         return ResponseEntity.ok(
                 Map.of(
@@ -77,7 +98,8 @@ public class UserController {
                         "name", user.getName() == null ? "" : user.getName(),
                         "email", user.getEmail() == null ? "" : user.getEmail(),
                         "number", user.getNumber() == null ? "" : user.getNumber(),
-                        "address", user.getAddress() == null ? "" : user.getAddress()));
+                        "address", user.getAddress() == null ? "" : user.getAddress(),
+                        "approvalStatus", approvalStatus));
     }
 
     @GetMapping("/ping")
@@ -99,6 +121,12 @@ public class UserController {
         if (!"ADMIN".equals(user.getRole())) {
             return ResponseEntity.status(403)
                     .body(Map.of("message", "Access denied. Not an admin."));
+        }
+
+        String approvalStatus = user.getApprovalStatus() == null ? "APPROVED" : user.getApprovalStatus();
+        if (!"APPROVED".equals(approvalStatus)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "Admin account is pending approval"));
         }
 
         return ResponseEntity.ok(Map.of(

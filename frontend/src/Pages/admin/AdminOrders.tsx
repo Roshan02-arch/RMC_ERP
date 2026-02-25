@@ -114,6 +114,13 @@ const AdminOrders = () => {
           </button>
 
           <button
+            onClick={() => navigate("/admin/adminlogins")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Admin Logins
+          </button>
+
+          <button
             onClick={() => {
               localStorage.clear();
               navigate("/login");

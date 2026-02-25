@@ -6,6 +6,7 @@ import PurchaseProduct from "./Pages/customer/PurchaseProduct";
 import AdminDashboard from "./Pages/admin/AdminDashboard";
 import AdminOrders from "./Pages/admin/AdminOrders";
 import AdminUsers from "./Pages/admin/AdminUsers";
+import AdminLogins from "./Pages/admin/AdminLogins";
 import ProtectedRoute from "./components/ProtectedRoute";
 import HomePage from "./Pages/customer/HomePage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
@@ -50,6 +51,15 @@ function App() {
           element={
             <ProtectedRoute role="ADMIN">
               <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/adminlogins"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminLogins />
             </ProtectedRoute>
           }
         />

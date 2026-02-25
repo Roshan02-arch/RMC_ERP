@@ -16,6 +16,7 @@ public class User {
     private String address;
     private String password;
     private String role;  // ADMIN or CUSTOMER
+    private String approvalStatus; // APPROVED / PENDING_APPROVAL / REJECTED
 
     public User() {}
 
@@ -47,5 +48,13 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getApprovalStatus() {
+        return approvalStatus;
+    }
+
+    public void setApprovalStatus(String approvalStatus) {
+        this.approvalStatus = approvalStatus;
     }
 }

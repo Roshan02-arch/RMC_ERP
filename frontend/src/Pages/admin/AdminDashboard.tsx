@@ -116,6 +116,10 @@ const AdminDashboard = () => {
             Users
           </button>
 
+          <button onClick={() => navigate("/admin/adminlogins")} className="text-left hover:text-indigo-400 transition">
+            Admin Logins
+          </button>
+
           <button
             onClick={() => {
               localStorage.clear();
