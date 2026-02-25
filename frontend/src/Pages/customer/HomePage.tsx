@@ -22,9 +22,7 @@ const slides = [
 
 const HomePage = () => {
   const [current, setCurrent] = useState(0);
-  const [username, setUsername] = useState<string | null>(null);
-
-  useEffect(() => {
+  const [username] = useState<string | null>(() => {
     const storedUser = localStorage.getItem("username");
     if (
       storedUser &&
@@ -32,11 +30,10 @@ const HomePage = () => {
       storedUser !== "undefined" &&
       storedUser !== "null"
     ) {
-      setUsername(storedUser);
-      return;
+      return storedUser;
     }
-    setUsername(null);
-  }, []);
+    return null;
+  });
 
   useEffect(() => {
     const interval = setInterval(() => {

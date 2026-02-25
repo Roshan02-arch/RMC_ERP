@@ -105,7 +105,7 @@ const PurchaseProduct = () => {
 
       alert("Order placed successfully!");
 
-    } catch (err) {
+    } catch {
       setError("Server error");
     } finally {
       setLoading(false);

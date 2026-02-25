@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaShoppingCart, FaClock, FaCheckCircle, FaTruck } from "react-icons/fa";
+import { FaShoppingCart, FaClock, FaCheckCircle } from "react-icons/fa";
 import UserNavbar from "../../components/UserNavbar";
 
+interface Order {
+  id: number;
+  orderId: string;
+  grade: string;
+  quantity: number;
+  status: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
      const role = localStorage.getItem("role");
@@ -168,7 +175,7 @@ const Dashboard = () => {
               </thead>
 
               <tbody className="divide-y divide-gray-200">
-                {orders.map((order: any) => (
+                {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4">{order.orderId}</td>
                     <td className="px-6 py-4">{order.grade}</td>

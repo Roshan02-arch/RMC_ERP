@@ -48,8 +48,9 @@ const Login = () => {
       }
 
       alert(data.message);
-    } catch (error: any) {
-      setErrorMsg(error.message || "Login failed");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Login failed";
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }

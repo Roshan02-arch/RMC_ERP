@@ -57,7 +57,7 @@ const Login = () => {
         navigate("/home");
       }
 
-    } catch (error) {
+    } catch {
       setErrorMsg("Server error. Please try again.");
       setLoading(false);
     }

@@ -1,4 +1,5 @@
-import { useState, FormEvent } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
@@ -117,12 +118,11 @@ const [showPassword, setShowPassword] = useState(false);
       alert("Account created successfully! Redirecting to Login...");
       navigate("/login");
 
-    } catch (error: any) {
+    } catch (error: unknown) {
 
         let errMsg = "Registration failed";
-
-        if (error.response?.data?.message) {
-          errMsg = error.response.data.message;
+        if (axios.isAxiosError(error) && error.response?.data?.message) {
+          errMsg = String(error.response.data.message);
         }
 
         if (errMsg === "User already exists") {

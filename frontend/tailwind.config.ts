@@ -1,23 +1,19 @@
-import type { Config } from "tailwindcss"
+import type { Config } from "tailwindcss";
 
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       animationDelay: {
-        1000: '1s',
-        1500: '1.5s',
-        2000: '2s',
-        2500: '2.5s',
-        3000: '3s',
-        3500: '3.5s',
-        4000: '4s',
-        4500: '4.5s',
+        "1000": "1s",
+        "1500": "1.5s",
+        "2000": "2s",
+        "2500": "2.5s",
+        "3000": "3s",
+        "3500": "3.5s",
+        "4000": "4s",
+        "4500": "4.5s",
       },
-    }
       keyframes: {
         fadeIn: {
           "0%": { opacity: "0" },
@@ -69,4 +65,4 @@ export default {
     },
   },
   plugins: [],
-} satisfies Config
+} satisfies Config;

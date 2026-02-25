@@ -45,11 +45,12 @@ function ForgotPassword() {
         navigate("/login");
       }, 3000);
 
-    } catch (err: any) {
-      setError(
-        err.response?.data?.message ||
-        "Unable to send reset link. Please try again."
-      );
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setError(String(err.response.data.message));
+      } else {
+        setError("Unable to send reset link. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

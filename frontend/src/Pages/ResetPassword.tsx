@@ -28,7 +28,7 @@ function ResetPassword() {
         navigate("/login");
       }, 2000);
 
-    } catch (error) {
+    } catch {
       setMessage("Invalid or expired token.");
     }
   };

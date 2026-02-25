@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 type UserNavbarProps = {
@@ -37,7 +37,7 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
   });
   const [loadingProfile, setLoadingProfile] = useState(false);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!userId) {
       return;
     }
@@ -54,19 +54,19 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
       localStorage.setItem("username", data.name || "");
       localStorage.setItem("userEmail", data.email || "");
       localStorage.setItem("userNumber", data.number || "");
-    } catch (error) {
+    } catch {
       // Keep local fallback data visible even when API call fails.
     } finally {
       setLoadingProfile(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (!showProfile) {
       return;
     }
     fetchProfile();
-  }, [showProfile]);
+  }, [showProfile, fetchProfile]);
 
   if (role !== "CUSTOMER") {
     return null;
