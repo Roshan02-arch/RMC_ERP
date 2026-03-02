@@ -2,13 +2,16 @@ package com.demo.controller;
 
 import com.demo.dto.ForgotPasswordRequest;
 import com.demo.dto.ResetPasswordRequest;
+import com.demo.dto.UpdateProfileRequest;
 import com.demo.dto.VerifyOtpRequest;
 import com.demo.entity.User;
+import com.demo.repository.UserRepository;
 import com.demo.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +22,8 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+    @Autowired
+    private UserRepository userRepository;
 
     // GET ALL
     @GetMapping
@@ -31,6 +36,23 @@ public class UserController {
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(userService.getUserById(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{userId}/profile")
+    public ResponseEntity<?> getUserProfile(@PathVariable Long userId) {
+        try {
+            User user = userService.getUserById(userId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", user.getId());
+            response.put("name", user.getName());
+            response.put("email", user.getEmail());
+            response.put("number", user.getNumber());
+            response.put("address", user.getAddress());
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.status(404)
                     .body(Map.of("message", e.getMessage()));
@@ -122,6 +144,49 @@ public class UserController {
         }
     }
 
+    @PutMapping("/{userId}/profile")
+    public ResponseEntity<?> updateProfile(
+            @PathVariable Long userId,
+            @RequestBody UpdateProfileRequest request) {
+
+        if (isBlank(request.getName()) || isBlank(request.getEmail()) || isBlank(request.getNumber())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Name, email and number are required"));
+        }
+
+        User user;
+        try {
+            user = userService.getUserById(userId);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        }
+
+        String normalizedName = request.getName().trim();
+        String normalizedEmail = request.getEmail().trim();
+        String normalizedNumber = request.getNumber().trim();
+        String normalizedAddress = request.getAddress() == null ? null : request.getAddress().trim();
+
+        if (!normalizedEmail.equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.findByEmail(normalizedEmail).isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Email already exists"));
+            }
+        }
+
+        String currentNumber = user.getNumber() == null ? "" : user.getNumber();
+        if (!normalizedNumber.equals(currentNumber)) {
+            if (userRepository.findByNumber(normalizedNumber).isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Mobile number already exists"));
+            }
+        }
+
+        user.setName(normalizedName);
+        user.setEmail(normalizedEmail);
+        user.setNumber(normalizedNumber);
+        user.setAddress(normalizedAddress);
+        userRepository.saveAndFlush(user);
+
+        return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
+    }
+
     // UPDATE
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(
@@ -137,6 +202,10 @@ public class UserController {
             return ResponseEntity.status(404)
                     .body(Map.of("message", e.getMessage()));
         }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     // DELETE

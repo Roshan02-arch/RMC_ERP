@@ -180,8 +180,8 @@ const [showPassword, setShowPassword] = useState(false);
         </div>
       ))}
 
-    {/* Top Right Navbar */}
-        <div className="absolute top-0 right-0 p-6 flex gap-6 text-sm font-medium text-gray-600">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-end gap-6 text-sm font-medium text-gray-700">
           <Link to="/" className="hover:text-indigo-600 transition-colors">
             Home
           </Link>
@@ -192,6 +192,7 @@ const [showPassword, setShowPassword] = useState(false);
             Register
           </Link>
         </div>
+      </div>
       {/* Register Card */}
       <div className="relative w-full max-w-md bg-white/88 backdrop-blur-md
                       shadow-[0_24px_60px_rgba(30,41,59,0.18)] rounded-2xl p-8 border border-white/60">

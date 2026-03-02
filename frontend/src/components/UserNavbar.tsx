@@ -29,9 +29,10 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
       : null;
 
   const [showProfile, setShowProfile] = useState(false);
+  const [displayName, setDisplayName] = useState(username || "");
   const [profile, setProfile] = useState<UserProfile | null>({
     id: Number(userId || 0),
-    name: username || "",
+    name: displayName,
     email: rawEmail || "",
     number: rawNumber || "",
   });
@@ -44,7 +45,10 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
 
     try {
       setLoadingProfile(true);
-      const res = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      let res = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      if (!res.ok) {
+        res = await fetch(`http://localhost:8080/api/users/${userId}`);
+      }
       if (!res.ok) {
         throw new Error("Failed to load profile");
       }
@@ -54,6 +58,7 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
       localStorage.setItem("username", data.name || "");
       localStorage.setItem("userEmail", data.email || "");
       localStorage.setItem("userNumber", data.number || "");
+      setDisplayName(data.name || "");
     } catch {
       // Keep local fallback data visible even when API call fails.
     } finally {
@@ -65,8 +70,31 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
     if (!showProfile) {
       return;
     }
-    fetchProfile();
+    void fetchProfile();
   }, [showProfile, fetchProfile]);
+
+  useEffect(() => {
+    const syncFromStorage = () => {
+      const nextName = localStorage.getItem("username") || "";
+      const nextEmail = localStorage.getItem("userEmail") || "";
+      const nextNumber = localStorage.getItem("userNumber") || "";
+
+      setDisplayName(nextName);
+      setProfile((prev) => ({
+        id: prev?.id || Number(userId || 0),
+        name: nextName,
+        email: nextEmail,
+        number: nextNumber,
+      }));
+    };
+
+    window.addEventListener("profile-updated", syncFromStorage);
+    window.addEventListener("storage", syncFromStorage);
+    return () => {
+      window.removeEventListener("profile-updated", syncFromStorage);
+      window.removeEventListener("storage", syncFromStorage);
+    };
+  }, [userId]);
 
   if (role !== "CUSTOMER") {
     return null;
@@ -91,7 +119,7 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
         <Link to="/purchaseproduct" className={`${hoverClass} transition`}>
           Purchase Product
         </Link>
-        {username && <span className="text-indigo-300">Welcome, {username}</span>}
+        {displayName && <span className="text-indigo-300">Welcome, {displayName}</span>}
         <button
           type="button"
           onClick={() => setShowProfile((prev) => !prev)}
