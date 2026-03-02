@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaShoppingCart, FaClock, FaCheckCircle } from "react-icons/fa";
-import UserNavbar from "../../components/UserNavbar";
+import { normalizeRole } from "../../utils/auth";
 
 interface Order {
   id: number;
@@ -14,9 +14,10 @@ interface Order {
 const Dashboard = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-     const role = localStorage.getItem("role");
+     const role = normalizeRole(localStorage.getItem("role"));
      const userId = localStorage.getItem("userId");
 
      // 🔐 Protect route
@@ -27,7 +28,7 @@ const Dashboard = () => {
 
      // ❗ If no userId, stop
      if (!userId) {
-       console.error("User ID not found");
+       navigate("/login");
        return;
      }
 
@@ -58,11 +59,21 @@ const Dashboard = () => {
   const total = orders.length;
   const pending = orders.filter(o => o.status === "PENDING_APPROVAL").length;
   const delivered = orders.filter(o => o.status === "DELIVERED").length;
+  const filteredOrders = orders.filter((order) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+    return (
+      (order.orderId || "").toLowerCase().includes(query) ||
+      (order.grade || "").toLowerCase().includes(query) ||
+      String(order.quantity ?? "").toLowerCase().includes(query) ||
+      (order.status || "").toLowerCase().includes(query)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
-      <UserNavbar />
-
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col p-6 space-y-6 pt-24">
         <h2 className="text-2xl font-bold text-indigo-400">RMC ERP</h2>
@@ -159,9 +170,18 @@ const Dashboard = () => {
        </div>
         {/* Orders Table */}
         <div className="bg-white rounded-xl shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-700 mb-4">
-            Recent Orders
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-700">
+              Recent Orders
+            </h2>
+            <input
+              type="text"
+              placeholder="Search orders..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition"
+            />
+          </div>
 
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm text-left text-gray-600">
@@ -175,7 +195,7 @@ const Dashboard = () => {
               </thead>
 
               <tbody className="divide-y divide-gray-200">
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4">{order.orderId}</td>
                     <td className="px-6 py-4">{order.grade}</td>
@@ -195,6 +215,13 @@ const Dashboard = () => {
                     </td>
                   </tr>
                 ))}
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-6 text-center text-gray-500">
+                      No orders found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
 
             </table>

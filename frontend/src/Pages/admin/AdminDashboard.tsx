@@ -120,6 +120,10 @@ const AdminDashboard = () => {
             Admin Logins
           </button>
 
+          <button onClick={() => navigate("/admin/schedule")} className="text-left hover:text-indigo-400 transition">
+            Schedule
+          </button>
+
           <button
             onClick={() => {
               localStorage.clear();

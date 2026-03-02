@@ -1,4 +1,5 @@
 import { Navigate } from "react-router-dom";
+import { normalizeRole } from "../utils/auth";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -6,9 +7,10 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, role }: ProtectedRouteProps) => {
-  const userRole = localStorage.getItem("role");
+  const userRole = normalizeRole(localStorage.getItem("role"));
+  const requiredRole = normalizeRole(role);
 
-  if (userRole !== role) {
+  if (userRole !== requiredRole) {
     return <Navigate to="/login" />;
   }
 

@@ -1,174 +1,116 @@
 package com.demo.controller;
 
-import java.util.Map;
-import java.util.Optional;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import com.demo.entity.User;
-import com.demo.repository.UserRepository;
+import com.demo.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
-@CrossOrigin(origins = "*")
+@CrossOrigin("*")
 public class UserController {
 
     @Autowired
-    private UserRepository userRepository;
+    private UserService userService;
+
+    // GET ALL
+    @GetMapping
+    public List<User> getAllUsers() {
+        return userService.getAllUsers();
+    }
+
+    // GET BY ID
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUserById(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(userService.getUserById(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404)
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // CREATE
+    @PostMapping
+    public ResponseEntity<?> createUser(@RequestBody User user) {
+        try {
+            User savedUser = userService.createUser(user);
+            return ResponseEntity.ok(Map.of(
+                    "message", "User created successfully",
+                    "userId", savedUser.getId()
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage()));
+        }
+    }
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody User user) {
+    public ResponseEntity<?> register(@RequestBody User user) {
+        return createUser(user);
+    }
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody User loginRequest) {
+
+        User user = userService.getByEmail(loginRequest.getEmail());
+
+        if (user == null || !user.getPassword().equals(loginRequest.getPassword())) {
+            return ResponseEntity.status(401)
+                    .body(Map.of("message", "Invalid email or password"));
+        }
+
+        if ("ADMIN".equalsIgnoreCase(user.getRole())
+                && !"APPROVED".equalsIgnoreCase(user.getApprovalStatus())) {
+
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "Admin approval pending"));
+        }
+
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("message", "Login successful");
+        response.put("role", user.getRole());
+        response.put("userId", user.getId());
+        response.put("name", user.getName());
+        response.put("email", user.getEmail());
+        response.put("number", user.getNumber());   // can be null safely
+        response.put("address", user.getAddress()); // can be null safely
+
+        return ResponseEntity.ok(response);
+    }
+    // UPDATE
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateUser(
+            @PathVariable Long id,
+            @RequestBody User user) {
 
         try {
-
-            if (userRepository.existsByEmail(user.getEmail()) ||
-                    userRepository.existsByNumber(user.getNumber())) {
-
-                return ResponseEntity.badRequest()
-                        .body(Map.of("message", "User already exists"));
-            }
-
-            String requestedRole = user.getRole() == null ? "CUSTOMER" : user.getRole().toUpperCase();
-            if (!"ADMIN".equals(requestedRole) && !"CUSTOMER".equals(requestedRole)) {
-                requestedRole = "CUSTOMER";
-            }
-
-            user.setRole(requestedRole);
-            if ("ADMIN".equals(requestedRole)) {
-                user.setApprovalStatus("PENDING_APPROVAL");
-            } else {
-                user.setApprovalStatus("APPROVED");
-            }
-            userRepository.save(user);
-
-            return ResponseEntity.ok(
-                    Map.of(
-                            "message",
-                            "ADMIN".equals(requestedRole)
-                                    ? "Admin account created. Waiting for approval."
-                                    : "User registered successfully!"
-                    ));
-
-        } catch (DataIntegrityViolationException ex) {
-
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "User already exists"));
-
-        } catch (Exception ex) {
-
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("message", "Something went wrong"));
-        }
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> loginUser(@RequestBody User loginRequest) {
-
-        User user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        if (!user.getPassword().equals(loginRequest.getPassword())) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid credentials"));
-        }
-
-        String role = user.getRole() != null ? user.getRole() : "CUSTOMER";
-        String approvalStatus = user.getApprovalStatus() == null ? "APPROVED" : user.getApprovalStatus();
-
-        if ("ADMIN".equals(role) && !"APPROVED".equals(approvalStatus)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "Admin account is pending approval"));
-        }
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "message", "Login successful",
-                        "role", role,
-                        "userId", user.getId(),
-                        "name", user.getName() == null ? "" : user.getName(),
-                        "email", user.getEmail() == null ? "" : user.getEmail(),
-                        "number", user.getNumber() == null ? "" : user.getNumber(),
-                        "address", user.getAddress() == null ? "" : user.getAddress(),
-                        "approvalStatus", approvalStatus));
-    }
-
-    @GetMapping("/ping")
-    public String ping() {
-        return "WORKING";
-    }
-
-    @PostMapping("/admin/login")
-    public ResponseEntity<?> adminLogin(@RequestBody User loginRequest) {
-
-        User user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        if (!user.getPassword().equals(loginRequest.getPassword())) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid credentials"));
-        }
-
-        if (!"ADMIN".equals(user.getRole())) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "Access denied. Not an admin."));
-        }
-
-        String approvalStatus = user.getApprovalStatus() == null ? "APPROVED" : user.getApprovalStatus();
-        if (!"APPROVED".equals(approvalStatus)) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "Admin account is pending approval"));
-        }
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Admin login successful",
-                "adminId", user.getId(),
-                "role", user.getRole()));
-    }
-
-    @GetMapping("/{userId}/profile")
-    public ResponseEntity<?> getUserProfile(@PathVariable Long userId) {
-        Optional<User> userOptional = userRepository.findById(userId);
-
-        if (userOptional.isEmpty()) {
+            userService.updateUser(id, user);
+            return ResponseEntity.ok(Map.of(
+                    "message", "User updated successfully"
+            ));
+        } catch (RuntimeException e) {
             return ResponseEntity.status(404)
-                    .body(Map.of("message", "User not found"));
+                    .body(Map.of("message", e.getMessage()));
         }
-
-        User user = userOptional.get();
-        return ResponseEntity.ok(Map.of(
-                "id", user.getId(),
-                "name", user.getName() == null ? "" : user.getName(),
-                "email", user.getEmail() == null ? "" : user.getEmail(),
-                "number", user.getNumber() == null ? "" : user.getNumber(),
-                "address", user.getAddress() == null ? "" : user.getAddress()));
     }
 
-    @PutMapping("/{userId}/profile")
-    public ResponseEntity<?> updateUserProfile(@PathVariable Long userId, @RequestBody Map<String, String> payload) {
-        Optional<User> userOptional = userRepository.findById(userId);
-
-        if (userOptional.isEmpty()) {
+    // DELETE
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteUser(@PathVariable Long id) {
+        try {
+            userService.deleteUser(id);
+            return ResponseEntity.ok(Map.of(
+                    "message", "User deleted successfully"
+            ));
+        } catch (RuntimeException e) {
             return ResponseEntity.status(404)
-                    .body(Map.of("message", "User not found"));
+                    .body(Map.of("message", e.getMessage()));
         }
-
-        User user = userOptional.get();
-        String address = payload.getOrDefault("address", "").trim();
-        user.setAddress(address);
-        userRepository.save(user);
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Profile updated successfully",
-                "address", user.getAddress()));
     }
+
 }
+

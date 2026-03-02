@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-
+import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { normalizeRole } from "../../utils/auth";
 type LoginForm = {
   email: string;
   password: string;
@@ -40,12 +41,18 @@ const Login = () => {
   });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    const role = localStorage.getItem("role");
+    const role = normalizeRole(localStorage.getItem("role"));
+    console.log("[Login] role in localStorage:", role);
     if (role === "ADMIN") {
+      console.log("[Login] redirecting to /admin");
       navigate("/admin");
-    } else if (role === "CUSTOMER") {
+      return;
+    }
+    if (role === "CUSTOMER") {
+      console.log("[Login] redirecting to /home");
       navigate("/home");
     }
   }, [navigate]);
@@ -85,21 +92,32 @@ const Login = () => {
         }),
       });
 
-      const data = await response.json();
+ const text = await response.text();
+ console.log("RAW RESPONSE:", text);
+
+ let data;
+ try {
+   data = JSON.parse(text);
+ } catch (e) {
+   console.error("Invalid JSON from backend");
+   setError("Server returned invalid response");
+   return;
+ }
 
       if (!response.ok) {
         setError(data.message || "Invalid email or password");
         return;
       }
 
-      localStorage.setItem("role", data.role);
+      const role = normalizeRole(data.role);
+      localStorage.setItem("role", role);
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("username", data.name || formData.email.split("@")[0]);
       localStorage.setItem("userEmail", data.email || formData.email);
       localStorage.setItem("userNumber", data.number || "");
       localStorage.setItem("userAddress", data.address || "");
 
-      if (data.role === "ADMIN") {
+      if (role === "ADMIN") {
         navigate("/admin");
       } else {
         navigate("/home");
@@ -195,8 +213,9 @@ const Login = () => {
             <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
               Password
             </label>
+             <div className="relative">
             <input
-              type="password"
+            type={showPassword ? "text" : "password"}
               id="password"
               name="password"
               value={formData.password}
@@ -204,6 +223,14 @@ const Login = () => {
               className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/70 backdrop-blur-sm"
               placeholder="Enter your password"
             />
+ <span
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-slate-500 hover:text-blue-500 transition"
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </span>
+              </div>
+
           </div>
 
           <button

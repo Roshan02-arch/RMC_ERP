@@ -1,20 +1,19 @@
 package com.demo.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 import com.demo.entity.User;
-import com.demo.repository.UserRepository;
+import java.util.List;
 
-@Service
-public class UserService {
+public interface UserService {
 
-    @Autowired
-    private UserRepository userRepository;
+    List<User> getAllUsers();
 
-    public String registerUser(User user) {
+    User getUserById(Long id);
 
-        userRepository.save(user);
+    User createUser(User user);
 
-        return "User registered successfully!";
-    }
+    User updateUser(Long id, User updatedUser);
+
+    void deleteUser(Long id);
+
+    User getByEmail(String email);
 }

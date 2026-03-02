@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { normalizeRole } from "../../utils/auth";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -12,23 +13,32 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:8080/api/users/admin/login",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        }
-      );
+      const response = await fetch("http://localhost:8080/api/users/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
       const data = await response.json();
 
-      if (response.ok) {
-        localStorage.setItem("role", data.role);
-        navigate("/admin");
-      } else {
+      if (!response.ok) {
         alert(data.message || "Login failed");
+        return;
       }
+
+      const role = normalizeRole(data.role);
+      if (role !== "ADMIN") {
+        alert("Not an admin account");
+        return;
+      }
+
+      localStorage.setItem("role", role);
+      localStorage.setItem("userId", data.userId);
+      localStorage.setItem("username", data.name || "");
+      localStorage.setItem("userEmail", data.email || "");
+      localStorage.setItem("userNumber", data.number || "");
+      localStorage.setItem("userAddress", data.address || "");
+      navigate("/admin");
     } finally {
       setLoading(false);
     }

@@ -13,6 +13,7 @@ interface Order {
 const AdminOrders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const fetchOrders = async () => {
     try {
@@ -48,6 +49,20 @@ const AdminOrders = () => {
       mounted = false;
     };
   }, [navigate]);
+
+  const filteredOrders = orders.filter((order) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+    return (
+      (order.orderId || "").toLowerCase().includes(query) ||
+      (order.grade || "").toLowerCase().includes(query) ||
+      String(order.quantity ?? "").toLowerCase().includes(query) ||
+      String(order.totalPrice ?? "").toLowerCase().includes(query) ||
+      (order.status || "").toLowerCase().includes(query)
+    );
+  });
 
   const updateStatus = async (orderId: string, status: string) => {
     await fetch(
@@ -121,6 +136,13 @@ const AdminOrders = () => {
           </button>
 
           <button
+            onClick={() => navigate("/admin/schedule")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Schedule
+          </button>
+
+          <button
             onClick={() => {
               localStorage.clear();
               navigate("/login");
@@ -133,7 +155,16 @@ const AdminOrders = () => {
       </aside>
 
       <main className="flex-1 p-10">
-        <h2 className="text-3xl font-bold text-gray-800 mb-8">All Orders</h2>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-800">All Orders</h2>
+          <input
+            type="text"
+            placeholder="Search orders..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition"
+          />
+        </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="overflow-x-auto">
@@ -150,7 +181,7 @@ const AdminOrders = () => {
               </thead>
 
               <tbody className="divide-y divide-gray-200">
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4 font-medium text-gray-800">{order.orderId}</td>
                     <td className="px-6 py-4">{order.grade}</td>
@@ -199,6 +230,13 @@ const AdminOrders = () => {
                     </td>
                   </tr>
                 ))}
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-6 text-center text-gray-500">
+                      No orders found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

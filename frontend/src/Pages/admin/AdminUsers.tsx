@@ -12,6 +12,7 @@ interface User {
 const AdminUsers = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const fetchUsers = async () => {
     try {
@@ -48,6 +49,19 @@ const AdminUsers = () => {
     };
   }, [navigate]);
 
+  const filteredUsers = users.filter((user) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+    return (
+      (user.name || "").toLowerCase().includes(query) ||
+      (user.email || "").toLowerCase().includes(query) ||
+      (user.number || "").toLowerCase().includes(query) ||
+      (user.role || "").toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-gray-200 flex">
       <aside className="w-64 bg-slate-900 text-white flex flex-col p-6 shadow-2xl">
@@ -80,6 +94,13 @@ const AdminUsers = () => {
           </button>
 
           <button
+            onClick={() => navigate("/admin/schedule")}
+            className="text-left px-4 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Schedule
+          </button>
+
+          <button
             onClick={() => {
               localStorage.clear();
               navigate("/login");
@@ -98,6 +119,8 @@ const AdminUsers = () => {
           <input
             type="text"
             placeholder="Search users..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition"
           />
         </div>
@@ -115,7 +138,7 @@ const AdminUsers = () => {
               </thead>
 
               <tbody className="divide-y divide-gray-200">
-                {users.map((user) => (
+                {filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-indigo-50 transition duration-200">
                     <td className="px-6 py-4 font-medium text-gray-800">{user.name}</td>
                     <td className="px-6 py-4 text-gray-600">{user.email}</td>
@@ -131,6 +154,13 @@ const AdminUsers = () => {
                     </td>
                   </tr>
                 ))}
+                {filteredUsers.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-6 text-center text-gray-500">
+                      No users found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import UserNavbar from "../../components/UserNavbar";
+import { normalizeRole } from "../../utils/auth";
 
 const slides = [
   {
@@ -22,19 +22,7 @@ const slides = [
 
 const HomePage = () => {
   const [current, setCurrent] = useState(0);
-  const [username] = useState<string | null>(() => {
-    const storedUser = localStorage.getItem("username");
-    if (
-      storedUser &&
-      storedUser.trim() !== "" &&
-      storedUser !== "undefined" &&
-      storedUser !== "null"
-    ) {
-      return storedUser;
-    }
-    return null;
-  });
-
+  const role = normalizeRole(localStorage.getItem("role"));
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrent((prev) => (prev + 1) % slides.length);
@@ -46,9 +34,7 @@ const HomePage = () => {
     <div className="min-h-screen flex flex-col">
 
       {/* Navbar */}
-      {username ? (
-        <UserNavbar variant="overlay" />
-      ) : (
+      {role !== "CUSTOMER" && (
         <div className="absolute top-0 right-0 p-6 flex gap-6 text-sm font-medium text-white z-50">
           <Link to="/" className="hover:text-indigo-300 transition">
             Home
@@ -89,7 +75,7 @@ const HomePage = () => {
               </p>
 
               <Link
-                to={username ? "/purchaseproduct" : "/login"}
+                to={role === "CUSTOMER" ? "/purchaseproduct" : "/login"}
                 className="px-6 py-3 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition"
               >
                 Get Started

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import UserNavbar from "../../components/UserNavbar";
 
 type OrderStatus =
   | "Pending Approval"
@@ -114,7 +113,6 @@ const PurchaseProduct = () => {
 
  return (
    <div className="min-h-screen bg-gray-100">
-     <UserNavbar />
      <div className="flex items-center justify-center p-6 pt-24">
      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl p-8">
 
