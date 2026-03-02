@@ -32,7 +32,13 @@ function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Customer */}
-        <Route element={<CustomerLayout />}>
+        <Route
+          element={
+            <ProtectedRoute role="CUSTOMER">
+              <CustomerLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/" element={<HomePage />} />
           <Route path="/home" element={<HomePage />} />
           <Route path="/dashboard" element={<Dashboard />} />

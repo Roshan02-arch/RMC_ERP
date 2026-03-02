@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import jsPDF from "jspdf";
 import { normalizeRole } from "../../utils/auth";
 
 type Order = {
@@ -11,6 +12,7 @@ type Order = {
   status: string;
   deliveryDate?: string;
   expectedArrivalTime?: string;
+  address?: string;
 };
 
 type PaymentRecord = {
@@ -31,14 +33,30 @@ const RATE_MAP: Record<string, number> = {
 const GST_RATE = 18;
 const STORAGE_KEY = "rmc_payment_history_v1";
 
+const formatCurrency = (value: number) =>
+  `Rs.${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const statusClass = (status: string) => {
+  if (status === "PAID") return "bg-slate-100 text-slate-700 border-slate-300";
+  if (status === "PARTIALLY_PAID") return "bg-zinc-100 text-zinc-700 border-zinc-300";
+  return "bg-gray-100 text-gray-700 border-gray-300";
+};
+
 const BillingPayment = () => {
   const navigate = useNavigate();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [method, setMethod] = useState("UPI");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(true);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const customerName = localStorage.getItem("username") || "Customer";
+  const customerEmail = localStorage.getItem("userEmail") || "-";
+  const customerPhone = localStorage.getItem("userNumber") || "-";
+  const customerAddress = localStorage.getItem("userAddress") || "-";
 
   useEffect(() => {
     const role = normalizeRole(localStorage.getItem("role"));
@@ -54,10 +72,10 @@ const BillingPayment = () => {
         const res = await fetch(`http://localhost:8080/api/orders/my-orders/${userId}`);
         const data = await res.json();
         const items = Array.isArray(data) ? data : [];
-        const delivered = items.filter((o) => o.status === "DELIVERED");
-        setOrders(delivered);
-        if (delivered.length > 0) {
-          setSelectedOrderId(delivered[0].orderId);
+        items.sort((a: Order, b: Order) => b.id - a.id);
+        setOrders(items);
+        if (items.length > 0) {
+          setSelectedOrderId(items[0].orderId);
         }
       } catch (error) {
         console.error("Failed to load billing data", error);
@@ -123,12 +141,12 @@ const BillingPayment = () => {
 
   const handlePay = () => {
     if (!selectedOrder) {
-      alert("Please select an invoice.");
+      alert("Please select an order.");
       return;
     }
     const payAmount = Number(amount);
     if (!payAmount || payAmount <= 0) {
-      alert("Enter valid payment amount.");
+      alert("Enter a valid amount.");
       return;
     }
     if (payAmount > outstanding) {
@@ -145,177 +163,316 @@ const BillingPayment = () => {
     };
 
     persistHistory([record, ...paymentHistory]);
-    alert("Payment successful. Status updated.");
+    alert("Payment recorded successfully.");
   };
 
   const handleDownloadPdf = () => {
-    if (!selectedOrder) return;
-    const html = `
-      <html>
-      <head><title>Invoice ${selectedOrder.orderId}</title></head>
-      <body style="font-family: Arial, sans-serif; padding: 24px;">
-        <h2>RMC Invoice</h2>
-        <p><strong>Invoice No:</strong> INV-${selectedOrder.orderId}</p>
-        <p><strong>Order ID:</strong> ${selectedOrder.orderId}</p>
-        <p><strong>Grade:</strong> ${selectedOrder.grade}</p>
-        <p><strong>Quantity Delivered:</strong> ${selectedOrder.quantity} m3</p>
-        <p><strong>Rate per Cubic Meter:</strong> Rs.${ratePerCubicMeter.toFixed(2)}</p>
-        <p><strong>Subtotal:</strong> Rs.${subtotal.toFixed(2)}</p>
-        <p><strong>GST (${GST_RATE}%):</strong> Rs.${gstAmount.toFixed(2)}</p>
-        <p><strong>Total Amount:</strong> Rs.${totalPayable.toFixed(2)}</p>
-        <p><strong>Status:</strong> ${paymentStatus}</p>
-      </body>
-      </html>
-    `;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
+    if (!selectedOrder) {
+      alert("Please select an order first.");
+      return;
+    }
+
+    try {
+      setDownloadingPdf(true);
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      let y = 20;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(18);
+      pdf.text("RMC ERP - TAX INVOICE", 14, y);
+      y += 10;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(11);
+      pdf.text(`Invoice No: INV-${selectedOrder.orderId}`, 14, y);
+      pdf.text(`Date: ${new Date().toLocaleDateString()}`, 140, y);
+      y += 8;
+      pdf.text(`Order ID: ${selectedOrder.orderId}`, 14, y);
+      y += 8;
+
+      pdf.text(`Customer: ${customerName}`, 14, y);
+      y += 6;
+      pdf.text(`Email: ${customerEmail}`, 14, y);
+      y += 6;
+      pdf.text(`Phone: ${customerPhone}`, 14, y);
+      y += 10;
+
+      pdf.setDrawColor(220, 220, 220);
+      pdf.rect(14, y, 182, 10);
+      pdf.text("Description", 16, y + 7);
+      pdf.text("Qty", 110, y + 7);
+      pdf.text("Rate", 135, y + 7);
+      pdf.text("Amount", 165, y + 7);
+      y += 10;
+
+      pdf.rect(14, y, 182, 12);
+      pdf.text(`Concrete ${selectedOrder.grade}`, 16, y + 8);
+      pdf.text(`${selectedOrder.quantity} m3`, 110, y + 8);
+      pdf.text(formatCurrency(ratePerCubicMeter), 135, y + 8);
+      pdf.text(formatCurrency(subtotal), 165, y + 8);
+      y += 18;
+
+      pdf.text(`Subtotal: ${formatCurrency(subtotal)}`, 132, y);
+      y += 7;
+      pdf.text(`GST (${GST_RATE}%): ${formatCurrency(gstAmount)}`, 132, y);
+      y += 7;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(12);
+      pdf.text(`Total: ${formatCurrency(totalPayable)}`, 132, y);
+      y += 8;
+      pdf.text(`Payment Status: ${paymentStatus.replaceAll("_", " ")}`, 132, y);
+
+      y += 14;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.text("This is a computer-generated invoice.", 14, y);
+      y += 14;
+      pdf.setDrawColor(120, 120, 120);
+      pdf.line(14, y, 82, y);
+      pdf.line(120, y, 188, y);
+
+      pdf.save(`Invoice_${selectedOrder.orderId}.pdf`);
+    } catch (error) {
+      console.error("Invoice PDF generation failed", error);
+      alert("Unable to download invoice PDF. Please try again.");
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <main className="max-w-6xl mx-auto px-6 pt-28 pb-10 space-y-6">
-        <div className="bg-white rounded-2xl shadow-md p-6">
-          <h1 className="text-2xl font-bold text-gray-800">Billing & Payment</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Invoice generation, payment tracking and outstanding balance management.
-          </p>
-        </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#f3f4f6_0%,#ffffff_45%,#e5e7eb_100%)]">
+      <main className="max-w-7xl mx-auto px-6 pt-28 pb-10 space-y-6">
+        <section className="rounded-3xl overflow-hidden shadow-xl border border-slate-700">
+          <div className="bg-[linear-gradient(110deg,#111827_0%,#1f2937_50%,#374151_100%)] text-white p-8">
+            <p className="text-xs uppercase tracking-[0.35em] text-slate-300">RMC ERP FINANCE</p>
+            <h1 className="text-3xl mt-2 font-semibold [font-family:'Georgia',serif]">Billing and Invoice Desk</h1>
+            <p className="text-slate-200 mt-2 text-sm">
+              Professional invoice management, payment capture, and downloadable tax invoice.
+            </p>
+          </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-md p-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Select Delivered Order</label>
+        <section className="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Select Order for Billing</label>
           {loading ? (
-            <p className="text-sm text-gray-500">Loading invoices...</p>
+            <p className="text-sm text-slate-500">Loading order invoices...</p>
           ) : orders.length === 0 ? (
-            <p className="text-sm text-gray-500">No delivered orders available for billing yet.</p>
+            <p className="text-sm text-slate-500">No orders available for billing.</p>
           ) : (
             <select
               value={selectedOrderId}
               onChange={(e) => setSelectedOrderId(e.target.value)}
-              className="w-full md:w-96 px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full md:w-[440px] px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-400"
             >
               {orders.map((o) => (
                 <option key={o.id} value={o.orderId}>
-                  {o.orderId}
+                  {o.orderId} - {o.grade} - {o.status}
                 </option>
               ))}
             </select>
           )}
-        </div>
+        </section>
 
         {selectedOrder && (
           <>
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">Invoice Generation (Read-Only)</h2>
-                <button onClick={handleDownloadPdf} className="px-4 py-2 rounded-md bg-indigo-600 text-white text-sm">
-                  Download PDF
-                </button>
+            <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Invoice Total</p>
+                <p className="text-2xl font-bold text-slate-800 mt-2">{formatCurrency(totalPayable)}</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
-                <p><span className="font-semibold">Invoice No:</span> INV-{selectedOrder.orderId}</p>
-                <p><span className="font-semibold">Order ID:</span> {selectedOrder.orderId}</p>
-                <p><span className="font-semibold">Concrete Grade:</span> {selectedOrder.grade}</p>
-                <p><span className="font-semibold">Quantity Delivered:</span> {selectedOrder.quantity} m3</p>
-                <p><span className="font-semibold">Rate per Cubic Meter:</span> Rs.{ratePerCubicMeter.toFixed(2)}</p>
-                <p><span className="font-semibold">Subtotal:</span> Rs.{subtotal.toFixed(2)}</p>
-                <p><span className="font-semibold">Applicable Tax (GST {GST_RATE}%):</span> Rs.{gstAmount.toFixed(2)}</p>
-                <p><span className="font-semibold">Total Amount:</span> Rs.{totalPayable.toFixed(2)}</p>
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Amount Paid</p>
+                <p className="text-2xl font-bold text-emerald-600 mt-2">{formatCurrency(totalPaid)}</p>
               </div>
-            </div>
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Balance Due</p>
+                <p className={`text-2xl font-bold mt-2 ${outstanding === 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                  {formatCurrency(outstanding)}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Payment Due Date</p>
+                <p className="text-2xl font-bold text-slate-800 mt-2">{dueDate}</p>
+              </div>
+            </section>
 
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Payment Information</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="text-gray-500">Total Payable</p>
-                  <p className="text-lg font-semibold text-gray-800">Rs.{totalPayable.toFixed(2)}</p>
+            <section className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="lg:col-span-3 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <div>
+                    <h2 className="font-semibold text-slate-800">Invoice Preview</h2>
+                    <p className="text-xs text-slate-500 mt-1">Tax Invoice Format - Customer Copy</p>
+                  </div>
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={downloadingPdf}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-white text-sm font-medium transition"
+                  >
+                    {downloadingPdf ? "Preparing PDF..." : "Download Invoice PDF"}
+                  </button>
                 </div>
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="text-gray-500">Payment Due Date</p>
-                  <p className="text-lg font-semibold text-gray-800">{dueDate}</p>
-                </div>
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="text-gray-500">Payment Status</p>
-                  <p className={`text-lg font-semibold ${paymentStatus === "PAID" ? "text-green-600" : "text-amber-600"}`}>
-                    {paymentStatus}
+
+                <div className="p-7 bg-white relative overflow-hidden">
+                  <div className="absolute right-6 top-6 rotate-12 border-2 border-slate-300 text-slate-600 px-3 py-1 text-xs font-bold rounded">
+                    {paymentStatus.replaceAll("_", " ")}
+                  </div>
+
+                  <div className="flex justify-between items-start pb-5 border-b border-slate-200">
+                    <div>
+                      <p className="text-3xl leading-none [font-family:'Georgia',serif] text-slate-900">RMC ERP</p>
+                      <p className="text-sm text-slate-500 mt-2">Ready Mix Concrete Billing Division</p>
+                      <p className="text-xs text-slate-400 mt-1">GST INVOICE</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Invoice No</p>
+                      <p className="font-semibold text-slate-800">INV-{selectedOrder.orderId}</p>
+                      <p className="text-xs text-slate-500 mt-2">Issue Date: {new Date().toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-6 text-sm">
+                    <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/60">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Billed To</p>
+                      <p className="font-semibold text-slate-800 mt-1">{customerName}</p>
+                      <p className="text-slate-600">{customerEmail}</p>
+                      <p className="text-slate-600">{customerPhone}</p>
+                      <p className="text-slate-600">{customerAddress}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/60">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Order Information</p>
+                      <p className="text-slate-700 mt-1"><span className="font-semibold">Order ID:</span> {selectedOrder.orderId}</p>
+                      <p className="text-slate-700"><span className="font-semibold">Concrete Grade:</span> {selectedOrder.grade}</p>
+                      <p className="text-slate-700"><span className="font-semibold">Order Status:</span> {selectedOrder.status}</p>
+                      <p className="text-slate-700">
+                        <span className="font-semibold">Delivery:</span>{" "}
+                        {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleString() : "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-800 text-slate-100">
+                        <tr>
+                          <th className="text-left px-4 py-3">Description</th>
+                          <th className="text-left px-4 py-3">Qty</th>
+                          <th className="text-left px-4 py-3">Rate</th>
+                          <th className="text-left px-4 py-3">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t border-slate-100">
+                          <td className="px-4 py-3">Concrete {selectedOrder.grade}</td>
+                          <td className="px-4 py-3">{selectedOrder.quantity} m3</td>
+                          <td className="px-4 py-3">{formatCurrency(ratePerCubicMeter)}</td>
+                          <td className="px-4 py-3">{formatCurrency(subtotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-5 ml-auto w-full md:w-[360px] rounded-xl border border-slate-200 p-4 bg-slate-50">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">Subtotal</span>
+                        <span className="font-medium text-slate-800">{formatCurrency(subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-600">GST ({GST_RATE}%)</span>
+                        <span className="font-medium text-slate-800">{formatCurrency(gstAmount)}</span>
+                      </div>
+                      <div className="border-t border-slate-200 pt-2 flex justify-between">
+                        <span className="font-semibold text-slate-700">Grand Total</span>
+                        <span className="font-bold text-slate-900">{formatCurrency(totalPayable)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <div className="h-10 border-b border-slate-400" />
+                    </div>
+                    <div>
+                      <div className="h-10 border-b border-slate-400" />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-400 mt-4">
+                    This is a computer-generated tax invoice and does not require a physical signature.
                   </p>
                 </div>
               </div>
-            </div>
 
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Payment Process</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <select
-                  value={method}
-                  onChange={(e) => setMethod(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="UPI">UPI</option>
-                  <option value="ONLINE_TRANSFER">Online Transfer</option>
-                  <option value="BANK_PAYMENT">Bank Payment</option>
-                </select>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="Amount"
-                  className="px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <button
-                  onClick={handlePay}
-                  disabled={outstanding === 0}
-                  className="px-4 py-2 rounded-md bg-emerald-600 text-white disabled:opacity-50"
-                >
-                  {outstanding === 0 ? "Already Paid" : "Pay Now"}
-                </button>
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+                  <h2 className="font-semibold text-slate-800 mb-4">Payment Collection</h2>
+                  <div className="space-y-3">
+                    <div className={`inline-flex px-3 py-1 text-xs rounded-full border font-semibold ${statusClass(paymentStatus)}`}>
+                      {paymentStatus.replaceAll("_", " ")}
+                    </div>
+                    <select
+                      value={method}
+                      onChange={(e) => setMethod(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    >
+                      <option value="UPI">UPI</option>
+                      <option value="ONLINE_TRANSFER">Online Transfer</option>
+                      <option value="BANK_PAYMENT">Bank Payment</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="Enter amount"
+                      className="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    />
+                    <button
+                      onClick={handlePay}
+                      disabled={outstanding === 0}
+                      className="w-full px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium transition"
+                    >
+                      {outstanding === 0 ? "Already Settled" : "Record Payment"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+                  <h2 className="font-semibold text-slate-800 mb-4">Invoice Metadata</h2>
+                  <div className="space-y-2 text-sm text-slate-700">
+                    <p><span className="font-semibold">Order ID:</span> {selectedOrder.orderId}</p>
+                    <p><span className="font-semibold">Grade:</span> {selectedOrder.grade}</p>
+                    <p><span className="font-semibold">Quantity:</span> {selectedOrder.quantity} m3</p>
+                    <p><span className="font-semibold">Address:</span> {selectedOrder.address || "-"}</p>
+                    <p><span className="font-semibold">Expected Arrival:</span> {selectedOrder.expectedArrivalTime ? new Date(selectedOrder.expectedArrivalTime).toLocaleString() : "-"}</p>
+                    <p><span className="font-semibold">Due Date:</span> {dueDate}</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            </section>
 
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Outstanding Balance Tracking</h2>
-              <p className="text-sm text-gray-700">
-                <span className="font-semibold">Outstanding Amount:</span>{" "}
-                <span className={outstanding === 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
-                  Rs.{outstanding.toFixed(2)}
-                </span>
-              </p>
-              {outstanding > 0 ? (
-                <p className="text-sm text-amber-700 mt-2">
-                  Reminder: Payment is pending. Please complete to close this transaction.
-                </p>
-              ) : (
-                <p className="text-sm text-green-700 mt-2">
-                  Payment completed successfully. Transaction is closed.
-                </p>
-              )}
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Previous Payment History</h2>
+            <section className="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+              <h2 className="font-semibold text-slate-800 mb-4">Payment History</h2>
               {selectedOrderPayments.length === 0 ? (
-                <p className="text-sm text-gray-500">No payment records yet.</p>
+                <p className="text-sm text-slate-500">No payment records yet.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
-                      <tr className="bg-gray-50 text-gray-600 uppercase text-xs">
+                      <tr className="bg-slate-50 text-slate-600 uppercase text-xs">
                         <th className="px-4 py-3 text-left">Txn ID</th>
                         <th className="px-4 py-3 text-left">Method</th>
                         <th className="px-4 py-3 text-left">Amount</th>
                         <th className="px-4 py-3 text-left">Date</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-slate-200">
                       {selectedOrderPayments.map((p) => (
                         <tr key={p.transactionId}>
                           <td className="px-4 py-3">{p.transactionId}</td>
                           <td className="px-4 py-3">{p.method}</td>
-                          <td className="px-4 py-3">Rs.{p.amount.toFixed(2)}</td>
+                          <td className="px-4 py-3">{formatCurrency(p.amount)}</td>
                           <td className="px-4 py-3">{new Date(p.paidAt).toLocaleString()}</td>
                         </tr>
                       ))}
@@ -323,7 +480,7 @@ const BillingPayment = () => {
                   </table>
                 </div>
               )}
-            </div>
+            </section>
           </>
         )}
       </main>

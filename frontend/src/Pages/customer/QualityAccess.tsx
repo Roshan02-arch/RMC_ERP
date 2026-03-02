@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import jsPDF from "jspdf";
 import { normalizeRole } from "../../utils/auth";
+import gorakhSignature from "../../assets/gorakh-signature.svg";
 
 type QualityRow = {
   orderId: string;
@@ -20,6 +22,31 @@ type QualityRow = {
   qualityCertificateNumber?: string | null;
   qualityCertificateGeneratedAt?: string | null;
   qualityRemarks: string;
+};
+
+const statusTone = (ok: boolean) =>
+  ok
+    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+    : "bg-rose-100 text-rose-700 border-rose-300";
+
+const getSignatureImageDataUrl = async (): Promise<string | null> => {
+  return await new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => resolve(null);
+    img.src = gorakhSignature;
+  });
 };
 
 const QualityAccess = () => {
@@ -61,55 +88,123 @@ const QualityAccess = () => {
     [rows, selectedOrderId]
   );
 
-  const downloadCertificate = () => {
+  const downloadCertificate = async () => {
     if (!selected || !selected.qualityCertificateGenerated) return;
-    const html = `
-      <html>
-      <head><title>Quality Certificate ${selected.orderId}</title></head>
-      <body style="font-family: Arial, sans-serif; padding: 24px;">
-        <h2>RMC Quality Certificate</h2>
-        <p><strong>Certificate No:</strong> ${selected.qualityCertificateNumber || "-"}</p>
-        <p><strong>Order ID:</strong> ${selected.orderId}</p>
-        <p><strong>Concrete Grade:</strong> ${selected.grade}</p>
-        <p><strong>Mix Design:</strong> ${selected.approvedMixDesignDetails}</p>
-        <p><strong>Material Proportions:</strong> ${selected.materialProportions}</p>
-        <p><strong>Slump Test:</strong> ${selected.slumpTestResultMm} mm (Required ${selected.slumpRequiredRangeMm})</p>
-        <p><strong>Cube Strength 7-Day:</strong> ${selected.cubeStrength7DayMpa} MPa</p>
-        <p><strong>Cube Strength 28-Day:</strong> ${selected.cubeStrength28DayMpa} MPa</p>
-        <p><strong>Required Strength:</strong> ${selected.requiredStrengthMpa} MPa</p>
-        <p><strong>Remarks:</strong> ${selected.qualityRemarks}</p>
-      </body>
-      </html>
-    `;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
+
+    try {
+      const pdf = new jsPDF("p", "mm", "a4");
+      const signatureImage = await getSignatureImageDataUrl();
+      let y = 16;
+
+      pdf.setFillColor(15, 23, 42);
+      pdf.rect(0, 0, 210, 34, "F");
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(16);
+      pdf.text("RMC QUALITY COMPLIANCE CERTIFICATE", 14, 14);
+      pdf.setFontSize(10);
+      pdf.text("Ready Mix Concrete Test and Approval Document", 14, 21);
+      pdf.text(`Certificate No: ${selected.qualityCertificateNumber || "-"}`, 14, 27);
+
+      pdf.setTextColor(20, 20, 20);
+      y = 44;
+      pdf.setFontSize(11);
+      pdf.text(`Order ID: ${selected.orderId}`, 14, y);
+      pdf.text(`Grade: ${selected.grade}`, 80, y);
+      pdf.text(`Status: ${selected.status}`, 130, y);
+      y += 8;
+      pdf.text(
+        `Generated At: ${
+          selected.qualityCertificateGeneratedAt
+            ? new Date(selected.qualityCertificateGeneratedAt).toLocaleString()
+            : "-"
+        }`,
+        14,
+        y
+      );
+
+      y += 12;
+      pdf.setFontSize(12);
+      pdf.text("Mix Design", 14, y);
+      y += 7;
+      pdf.setFontSize(10);
+      pdf.text(`Approved Mix: ${selected.approvedMixDesignDetails}`, 14, y);
+      y += 6;
+      pdf.text(`Material Proportions: ${selected.materialProportions}`, 14, y);
+
+      y += 10;
+      pdf.setFontSize(12);
+      pdf.text("Test Results", 14, y);
+      y += 7;
+      pdf.setFontSize(10);
+      pdf.text(
+        `Slump Test: ${selected.slumpTestResultMm} mm (Required ${selected.slumpRequiredRangeMm}) - ${
+          selected.slumpWithinStandard ? "Within Standard" : "Out of Standard"
+        }`,
+        14,
+        y
+      );
+      y += 6;
+      pdf.text(
+        `Cube Strength 7-Day: ${selected.cubeStrength7DayMpa} MPa - ${
+          selected.cube7DayWithinStandard ? "Within Standard" : "Below Standard"
+        }`,
+        14,
+        y
+      );
+      y += 6;
+      pdf.text(
+        `Cube Strength 28-Day: ${selected.cubeStrength28DayMpa} MPa (Required ${selected.requiredStrengthMpa} MPa) - ${
+          selected.cube28DayWithinStandard ? "Meets Standard" : "Below Standard"
+        }`,
+        14,
+        y
+      );
+
+      y += 12;
+      pdf.setFontSize(12);
+      pdf.text("Quality Remarks", 14, y);
+      y += 7;
+      pdf.setFontSize(10);
+      pdf.text(selected.qualityRemarks || "-", 14, y);
+
+      y += 18;
+      pdf.setDrawColor(140, 140, 140);
+      pdf.line(14, y, 82, y);
+      pdf.line(120, y, 188, y);
+      if (signatureImage) {
+        pdf.addImage(signatureImage, "PNG", 14, y - 13, 42, 12);
+        pdf.addImage(signatureImage, "PNG", 120, y - 13, 42, 12);
+      }
+
+      pdf.save(`Quality_Certificate_${selected.orderId}.pdf`);
+    } catch (error) {
+      console.error("Certificate PDF download failed", error);
+      alert("Unable to download certificate right now.");
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-cyan-50 to-teal-100">
       <main className="max-w-6xl mx-auto px-6 pt-28 pb-10 space-y-6">
-        <div className="bg-white rounded-2xl shadow-md p-6">
-          <h1 className="text-2xl font-bold text-gray-800">Quality Access</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            View approved mix design, test reports and quality certificate for your orders.
+        <section className="rounded-3xl bg-slate-900 text-white p-8 shadow-xl">
+          <p className="text-xs uppercase tracking-[0.32em] text-cyan-300">RMC ERP</p>
+          <h1 className="text-3xl font-bold mt-2">Quality Certificate Center</h1>
+          <p className="text-slate-300 mt-2 text-sm">
+            Professional quality documents for approved mix design and concrete test records.
           </p>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-md p-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Select Order</label>
+        <section className="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Select Order</label>
           {loading ? (
-            <p className="text-sm text-gray-500">Loading quality records...</p>
+            <p className="text-sm text-slate-500">Loading quality records...</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-gray-500">No approved quality records found yet.</p>
+            <p className="text-sm text-slate-500">No approved quality records found yet.</p>
           ) : (
             <select
               value={selectedOrderId}
               onChange={(e) => setSelectedOrderId(e.target.value)}
-              className="w-full md:w-96 px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full md:w-[420px] px-4 py-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400"
             >
               {rows.map((r) => (
                 <option key={r.orderId} value={r.orderId}>
@@ -118,61 +213,112 @@ const QualityAccess = () => {
               ))}
             </select>
           )}
-        </div>
+        </section>
 
         {selected && (
           <>
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Mix Design Information (Read-Only)</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
-                <p><span className="font-semibold">Concrete Grade:</span> {selected.grade}</p>
-                <p><span className="font-semibold">Order Status:</span> {selected.status}</p>
-                <p><span className="font-semibold">Approved Mix Design:</span> {selected.approvedMixDesignDetails}</p>
-                <p><span className="font-semibold">Material Proportions:</span> {selected.materialProportions}</p>
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Order ID</p>
+                <p className="text-xl font-bold text-slate-800 mt-2">{selected.orderId}</p>
               </div>
-            </div>
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Concrete Grade</p>
+                <p className="text-xl font-bold text-slate-800 mt-2">{selected.grade}</p>
+              </div>
+              <div className="rounded-2xl bg-white p-5 shadow-md border border-slate-100">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Certificate Status</p>
+                <p className={`text-xl font-bold mt-2 ${selected.qualityCertificateGenerated ? "text-emerald-600" : "text-amber-600"}`}>
+                  {selected.qualityCertificateGenerated ? "GENERATED" : "PENDING"}
+                </p>
+              </div>
+            </section>
 
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Test Report Access</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="font-semibold text-gray-800 mb-1">Slump Test</p>
-                  <p className="text-gray-700">Result: {selected.slumpTestResultMm} mm</p>
-                  <p className="text-gray-700">Required: {selected.slumpRequiredRangeMm}</p>
-                  <p className={selected.slumpWithinStandard ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                    {selected.slumpWithinStandard ? "Within Standard" : "Out of Standard"}
+            <section className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+              <div className="bg-gradient-to-r from-slate-900 to-cyan-900 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">RMC Quality Certificate</h2>
+                  <p className="text-xs text-cyan-200 mt-1">
+                    Certificate No: {selected.qualityCertificateNumber || "-"}
                   </p>
                 </div>
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <p className="font-semibold text-gray-800 mb-1">Cube Test Strength</p>
-                  <p className="text-gray-700">7-Day: {selected.cubeStrength7DayMpa} MPa</p>
-                  <p className="text-gray-700">28-Day: {selected.cubeStrength28DayMpa} MPa</p>
-                  <p className="text-gray-700">Required: {selected.requiredStrengthMpa} MPa</p>
-                  <p className={selected.cube28DayWithinStandard ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                    {selected.cube28DayWithinStandard ? "Meets Required Standard" : "Below Required Standard"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">Quality Certificate</h2>
                 <button
                   onClick={downloadCertificate}
                   disabled={!selected.qualityCertificateGenerated}
-                  className="px-4 py-2 rounded-md bg-indigo-600 text-white text-sm disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-900 font-semibold text-sm transition"
                 >
-                  Download PDF
+                  Download Certificate PDF
                 </button>
               </div>
-              <div className="text-sm text-gray-700 space-y-2">
-                <p><span className="font-semibold">Certificate Status:</span> {selected.qualityCertificateGenerated ? "Generated" : "Pending"}</p>
-                <p><span className="font-semibold">Certificate Number:</span> {selected.qualityCertificateNumber || "-"}</p>
-                <p><span className="font-semibold">Generated At:</span> {selected.qualityCertificateGeneratedAt ? new Date(selected.qualityCertificateGeneratedAt).toLocaleString() : "-"}</p>
-                <p><span className="font-semibold">Remarks:</span> {selected.qualityRemarks}</p>
+
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+                  <p><span className="font-semibold">Order Status:</span> {selected.status}</p>
+                  <p>
+                    <span className="font-semibold">Generated At:</span>{" "}
+                    {selected.qualityCertificateGeneratedAt
+                      ? new Date(selected.qualityCertificateGeneratedAt).toLocaleString()
+                      : "-"}
+                  </p>
+                  <p><span className="font-semibold">Approved Mix Design:</span> {selected.approvedMixDesignDetails}</p>
+                  <p><span className="font-semibold">Material Proportions:</span> {selected.materialProportions}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                    <p className="font-semibold text-slate-800 mb-2">Slump Test Report</p>
+                    <p className="text-sm text-slate-700">Result: {selected.slumpTestResultMm} mm</p>
+                    <p className="text-sm text-slate-700">Required: {selected.slumpRequiredRangeMm}</p>
+                    <p className={`mt-2 inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(selected.slumpWithinStandard)}`}>
+                      {selected.slumpWithinStandard ? "Within Standard" : "Out of Standard"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 p-4 bg-slate-50">
+                    <p className="font-semibold text-slate-800 mb-2">Cube Strength Report</p>
+                    <p className="text-sm text-slate-700">7-Day: {selected.cubeStrength7DayMpa} MPa</p>
+                    <p className="text-sm text-slate-700">28-Day: {selected.cubeStrength28DayMpa} MPa</p>
+                    <p className="text-sm text-slate-700">Required: {selected.requiredStrengthMpa} MPa</p>
+                    <p className={`mt-2 inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(selected.cube28DayWithinStandard)}`}>
+                      {selected.cube28DayWithinStandard ? "Meets Standard" : "Below Standard"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-cyan-700">Quality Remarks</p>
+                  <p className="text-sm text-slate-700 mt-2">{selected.qualityRemarks || "-"}</p>
+                </div>
+
+                <div className="pt-6">
+                  <p className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+                    Signatures
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <div className="relative h-14">
+                        <img
+                          src={gorakhSignature}
+                          alt="Signature example"
+                          className="h-12 w-auto object-contain absolute left-0 bottom-[2px]"
+                        />
+                        <div className="absolute left-0 right-0 bottom-0 border-b border-slate-400" />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="relative h-14">
+                        <img
+                          src={gorakhSignature}
+                          alt="Signature example"
+                          className="h-12 w-auto object-contain absolute left-0 bottom-[2px]"
+                        />
+                        <div className="absolute left-0 right-0 bottom-0 border-b border-slate-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            </section>
           </>
         )}
       </main>
