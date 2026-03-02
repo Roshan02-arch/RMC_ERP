@@ -36,6 +36,7 @@ const PurchaseProduct = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<number | null>(null);
 
   useEffect(() => {
     const role = normalizeRole(localStorage.getItem("role"));
@@ -136,6 +137,43 @@ const PurchaseProduct = () => {
       setError("Server error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteOrder = async (order: Order) => {
+    const confirmDelete = window.confirm(`Delete order ${order.orderId}?`);
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      setDeletingOrderId(order.id);
+      const response = await fetch(`http://localhost:8080/api/orders/${order.id}`, {
+        method: "DELETE",
+      });
+
+      const raw = await response.text();
+      let message = "Unable to delete order";
+      try {
+        const data = JSON.parse(raw);
+        message = data.message || message;
+      } catch {
+        if (raw) {
+          message = raw;
+        }
+      }
+
+      if (!response.ok) {
+        alert(message);
+        return;
+      }
+
+      setOrders((prev) => prev.filter((item) => item.id !== order.id));
+      alert("Order deleted successfully.");
+    } catch {
+      alert("Unable to delete order right now.");
+    } finally {
+      setDeletingOrderId(null);
     }
   };
 
@@ -295,6 +333,16 @@ const PurchaseProduct = () => {
                     {order.status.replaceAll("_", " ")}
                   </span>
                 </p>
+
+                <div className="mt-3">
+                  <button
+                    onClick={() => deleteOrder(order)}
+                    disabled={deletingOrderId === order.id}
+                    className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed transition"
+                  >
+                    {deletingOrderId === order.id ? "Deleting..." : "Delete Order"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
