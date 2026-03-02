@@ -35,16 +35,18 @@ const HomePage = () => {
 
       {/* Navbar */}
       {role !== "CUSTOMER" && (
-        <div className="absolute top-0 right-0 p-6 flex gap-6 text-sm font-medium text-white z-50">
-          <Link to="/" className="hover:text-indigo-300 transition">
-            Home
-          </Link>
-          <Link to="/login" className="hover:text-indigo-300 transition">
-            Login
-          </Link>
-          <Link to="/register" className="hover:text-indigo-300 transition">
-            Register
-          </Link>
+        <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex justify-end gap-6 text-sm font-medium text-gray-700">
+            <Link to="/" className="text-indigo-600">
+              Home
+            </Link>
+            <Link to="/login" className="hover:text-indigo-600 transition">
+              Login
+            </Link>
+            <Link to="/register" className="hover:text-indigo-600 transition">
+              Register
+            </Link>
+          </div>
         </div>
       )}
 
