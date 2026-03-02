@@ -26,9 +26,10 @@ const Navbar = () => {
       : null;
 
   const [showProfile, setShowProfile] = useState(false);
+  const [displayName, setDisplayName] = useState(username || "");
   const [profile, setProfile] = useState<UserProfile | null>({
     id: Number(userId || 0),
-    name: username || "",
+    name: displayName,
     email: rawEmail || "",
     number: rawNumber || "",
   });
@@ -41,7 +42,10 @@ const Navbar = () => {
 
     try {
       setLoadingProfile(true);
-      const res = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      let res = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      if (!res.ok) {
+        res = await fetch(`http://localhost:8080/api/users/${userId}`);
+      }
       if (!res.ok) {
         throw new Error("Failed to load profile");
       }
@@ -51,6 +55,7 @@ const Navbar = () => {
       localStorage.setItem("username", data.name || "");
       localStorage.setItem("userEmail", data.email || "");
       localStorage.setItem("userNumber", data.number || "");
+      setDisplayName(data.name || "");
     } catch {
       // Keep local fallback profile when API fails.
     } finally {
@@ -64,6 +69,29 @@ const Navbar = () => {
     }
     void fetchProfile();
   }, [showProfile, fetchProfile]);
+
+  useEffect(() => {
+    const syncFromStorage = () => {
+      const nextName = localStorage.getItem("username") || "";
+      const nextEmail = localStorage.getItem("userEmail") || "";
+      const nextNumber = localStorage.getItem("userNumber") || "";
+
+      setDisplayName(nextName);
+      setProfile((prev) => ({
+        id: prev?.id || Number(userId || 0),
+        name: nextName,
+        email: nextEmail,
+        number: nextNumber,
+      }));
+    };
+
+    window.addEventListener("profile-updated", syncFromStorage);
+    window.addEventListener("storage", syncFromStorage);
+    return () => {
+      window.removeEventListener("profile-updated", syncFromStorage);
+      window.removeEventListener("storage", syncFromStorage);
+    };
+  }, [userId]);
 
   if (role !== "CUSTOMER") {
     return null;
@@ -90,7 +118,7 @@ const Navbar = () => {
         <Link to="/quality-access" className="hover:text-indigo-600 transition">
           Quality Access
         </Link>
-        {username && <span className="text-indigo-600">Welcome, {username}</span>}
+        {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
         <button
           type="button"
           onClick={() => setShowProfile((prev) => !prev)}
