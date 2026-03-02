@@ -24,32 +24,21 @@ function ForgotPassword() {
     try {
       setLoading(true);
 
-      const response = await axios.post(
-        "http://localhost:8080/api/users/forgot-password",
-        null,
-        {
-          params: { email }
-        }
-      );
+      const response = await axios.post("http://localhost:8080/api/users/forgot-password", {
+        email: email.trim(),
+      });
 
-      // Show backend success message
-      setMessage(
-        response.data.message ||
-        "If this email is registered, a reset link has been sent."
-      );
+      setMessage(response.data.message || "Verification code sent to email.");
 
-      setEmail("");
-
-      // Redirect after 3 seconds
       setTimeout(() => {
-        navigate("/login");
-      }, 3000);
+        navigate("/reset-password", { state: { email: email.trim() } });
+      }, 1000);
 
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.data?.message) {
         setError(String(err.response.data.message));
       } else {
-        setError("Unable to send reset link. Please try again.");
+        setError("Unable to send verification code. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -75,7 +64,7 @@ function ForgotPassword() {
           style={buttonStyle}
           disabled={loading}
         >
-          {loading ? "Sending..." : "Send Reset Link"}
+          {loading ? "Sending..." : "Send Verification Code"}
         </button>
       </form>
 

@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./Pages/auth/Login";
 import Logout from "./Pages/auth/Logout";
 import Register from "./Pages/auth/Register";
+import ForgotPassword from "./Pages/auth/ForgotPassword";
+import ResetPassword from "./Pages/auth/ResetPassword";
 import Dashboard from "./Pages/customer/Dashboard";
 import PurchaseProduct from "./Pages/customer/PurchaseProduct";
 import DeliveryTracking from "./Pages/customer/DeliveryTracking";
@@ -26,6 +28,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Customer */}
         <Route element={<CustomerLayout />}>
