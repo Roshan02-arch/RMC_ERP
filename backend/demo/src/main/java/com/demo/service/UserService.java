@@ -16,4 +16,10 @@ public interface UserService {
     void deleteUser(Long id);
 
     User getByEmail(String email);
+
+    void sendResetOtp(String email);
+
+    void verifyResetOtp(String email, String otp);
+
+    void resetPasswordWithOtp(String email, String otp, String newPassword);
 }

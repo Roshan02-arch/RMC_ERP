@@ -1,5 +1,8 @@
 package com.demo.controller;
 
+import com.demo.dto.ForgotPasswordRequest;
+import com.demo.dto.ResetPasswordRequest;
+import com.demo.dto.VerifyOtpRequest;
 import com.demo.entity.User;
 import com.demo.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,6 +84,44 @@ public class UserController {
 
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        try {
+            userService.sendResetOtp(request.getEmail());
+            return ResponseEntity.ok(Map.of(
+                    "message", "Verification code sent to your email",
+                    "email", request.getEmail()
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/verify-reset-otp")
+    public ResponseEntity<?> verifyResetOtp(@RequestBody VerifyOtpRequest request) {
+        try {
+            userService.verifyResetOtp(request.getEmail(), request.getOtp());
+            return ResponseEntity.ok(Map.of("message", "Code verified"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+        try {
+            userService.resetPasswordWithOtp(
+                    request.getEmail(),
+                    request.getOtp(),
+                    request.getNewPassword()
+            );
+            return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
     // UPDATE
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(

@@ -19,4 +19,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // 🔍 Find by role and approval status (used in admin approval logic)
     List<User> findByRoleAndApprovalStatus(String role, String approvalStatus);
+
+    Optional<User> findByEmailAndResetOtp(String email, String resetOtp);
 }

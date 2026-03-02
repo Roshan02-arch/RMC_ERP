@@ -255,6 +255,11 @@ const Login = () => {
         </form>
 
         <div className="mt-6 text-center transform transition-all duration-500 hover:translate-y-[-2px]">
+          <p className="text-sm text-slate-600 mb-2">
+            <Link to="/forgot-password" className="text-blue-500 hover:text-blue-600 font-medium transition-colors duration-200">
+              Forgot Password?
+            </Link>
+          </p>
           <p className="text-sm text-slate-600">
             Don&apos;t have an account?{" "}
             <Link to="/register" className="text-blue-500 hover:text-blue-600 font-medium transition-colors duration-200">
