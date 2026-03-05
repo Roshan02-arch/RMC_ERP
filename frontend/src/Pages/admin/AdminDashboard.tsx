@@ -49,19 +49,6 @@ const AdminDashboard = () => {
     };
   }, [navigate]);
 
-  const updateStatus = async (orderId: string, status: string) => {
-    try {
-      await fetch(
-        `http://localhost:8080/api/admin/orders/${orderId}/status?status=${status}`,
-        { method: "PUT" }
-      );
-
-      void fetchOrders();
-    } catch (err) {
-      console.error("Status update failed", err);
-    }
-  };
-
   const deleteOrder = async (orderId: string) => {
     const confirmed = window.confirm("Are you sure you want to delete this order?");
     if (!confirmed) {
@@ -95,8 +82,8 @@ const AdminDashboard = () => {
   };
 
   const totalOrders = orders.length;
-  const pendingOrders = orders.filter((o) => o.status === "PENDING_APPROVAL").length;
-  const approvedOrders = orders.filter((o) => o.status === "APPROVED").length;
+  const deliveredOrders = orders.filter((o) => o.status === "DELIVERED").length;
+  const activeOrders = orders.filter((o) => o.status !== "DELIVERED").length;
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
@@ -124,6 +111,10 @@ const AdminDashboard = () => {
             Schedule
           </button>
 
+          <button onClick={() => navigate("/admin/inventory")} className="text-left hover:text-indigo-400 transition">
+            Inventory
+          </button>
+
           <button
             onClick={() => {
               localStorage.clear();
@@ -144,13 +135,13 @@ const AdminDashboard = () => {
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6">
-            <h3 className="text-sm text-gray-500">Pending</h3>
-            <p className="text-3xl font-bold text-yellow-600">{pendingOrders}</p>
+            <h3 className="text-sm text-gray-500">Active Orders</h3>
+            <p className="text-3xl font-bold text-blue-600">{activeOrders}</p>
           </div>
 
           <div className="bg-white rounded-2xl shadow-md p-6">
-            <h3 className="text-sm text-gray-500">Approved</h3>
-            <p className="text-3xl font-bold text-green-600">{approvedOrders}</p>
+            <h3 className="text-sm text-gray-500">Delivered</h3>
+            <p className="text-3xl font-bold text-green-600">{deliveredOrders}</p>
           </div>
         </div>
 
@@ -196,20 +187,6 @@ const AdminDashboard = () => {
 
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => updateStatus(order.orderId, "APPROVED")}
-                          className="px-3 py-1 text-xs font-medium bg-green-600 hover:bg-green-500 text-white rounded-md transition"
-                        >
-                          Approve
-                        </button>
-
-                        <button
-                          onClick={() => updateStatus(order.orderId, "REJECTED")}
-                          className="px-3 py-1 text-xs font-medium bg-red-600 hover:bg-red-500 text-white rounded-md transition"
-                        >
-                          Reject
-                        </button>
-
                         <button
                           onClick={() => deleteOrder(order.orderId)}
                           className="px-3 py-1 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-md transition"

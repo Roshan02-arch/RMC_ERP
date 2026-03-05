@@ -64,15 +64,6 @@ const AdminOrders = () => {
     );
   });
 
-  const updateStatus = async (orderId: string, status: string) => {
-    await fetch(
-      `http://localhost:8080/api/admin/orders/${orderId}/status?status=${status}`,
-      { method: "PUT" }
-    );
-
-    void fetchOrders();
-  };
-
   const deleteOrder = async (orderId: string) => {
     const confirmed = window.confirm("Are you sure you want to delete this order?");
     if (!confirmed) {
@@ -143,6 +134,13 @@ const AdminOrders = () => {
           </button>
 
           <button
+            onClick={() => navigate("/admin/inventory")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Inventory
+          </button>
+
+          <button
             onClick={() => {
               localStorage.clear();
               navigate("/login");
@@ -206,20 +204,6 @@ const AdminOrders = () => {
 
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => updateStatus(order.orderId, "APPROVED")}
-                          className="px-4 py-1 text-xs font-medium bg-green-600 hover:bg-green-500 text-white rounded-md transition"
-                        >
-                          Approve
-                        </button>
-
-                        <button
-                          onClick={() => updateStatus(order.orderId, "REJECTED")}
-                          className="px-4 py-1 text-xs font-medium bg-red-600 hover:bg-red-500 text-white rounded-md transition"
-                        >
-                          Reject
-                        </button>
-
                         <button
                           onClick={() => deleteOrder(order.orderId)}
                           className="px-4 py-1 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-md transition"

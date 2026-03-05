@@ -9,11 +9,14 @@ import PurchaseProduct from "./Pages/customer/PurchaseProduct";
 import DeliveryTracking from "./Pages/customer/DeliveryTracking";
 import BillingPayment from "./Pages/customer/BillingPayment";
 import QualityAccess from "./Pages/customer/QualityAccess";
+import OrderSuccess from "./Pages/customer/OrderSuccess";
+import CheckoutPayment from "./Pages/customer/CheckoutPayment";
 import AdminDashboard from "./Pages/admin/AdminDashboard";
 import AdminOrders from "./Pages/admin/AdminOrders";
 import AdminUsers from "./Pages/admin/AdminUsers";
 import AdminLogins from "./Pages/admin/AdminLogins";
 import AdminSchedule from "./Pages/admin/AdminSchedule";
+import AdminInventory from "./Pages/admin/AdminInventory";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
@@ -43,8 +46,10 @@ function App() {
           <Route path="/home" element={<HomePage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/purchaseproduct" element={<PurchaseProduct />} />
+          <Route path="/checkout-payment" element={<CheckoutPayment />} />
           <Route path="/delivery-tracking" element={<DeliveryTracking />} />
           <Route path="/billing-payment" element={<BillingPayment />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
           <Route path="/customize-profile" element={<CustomizeProfile />} />
         </Route>
@@ -91,6 +96,15 @@ function App() {
           element={
             <ProtectedRoute role="ADMIN">
               <AdminSchedule />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/inventory"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminInventory />
             </ProtectedRoute>
           }
         />

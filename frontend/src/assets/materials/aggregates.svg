@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="220" viewBox="0 0 360 220">
+  <rect width="360" height="220" rx="18" fill="#f1f5f9"/>
+  <circle cx="90" cy="145" r="28" fill="#475569"/>
+  <circle cx="145" cy="140" r="30" fill="#64748b"/>
+  <circle cx="205" cy="150" r="26" fill="#334155"/>
+  <circle cx="255" cy="142" r="29" fill="#0f172a"/>
+  <text x="180" y="82" text-anchor="middle" fill="#334155" font-size="22" font-family="Arial" font-weight="700">AGGREGATES</text>
+</svg>
