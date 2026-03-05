@@ -502,6 +502,7 @@ const AdminSchedule = () => {
           <button onClick={() => navigate("/admin/users")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Users</button>
           <button onClick={() => navigate("/admin/adminlogins")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Admin Logins</button>
           <button onClick={() => navigate("/admin/schedule")} className="text-left px-3 py-2 rounded-lg bg-slate-800">Schedule</button>
+          <button onClick={() => navigate("/admin/inventory")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Inventory</button>
           <button
             onClick={() => {
               localStorage.clear();

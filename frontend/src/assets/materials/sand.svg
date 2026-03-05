@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="220" viewBox="0 0 360 220">
+  <rect width="360" height="220" rx="18" fill="#f8fafc"/>
+  <path d="M20 180 C80 120, 150 150, 210 120 C260 95, 310 120, 340 180 L20 180 Z" fill="#d6b98b"/>
+  <text x="180" y="105" text-anchor="middle" fill="#7c5f35" font-size="24" font-family="Arial" font-weight="700">SAND</text>
+</svg>

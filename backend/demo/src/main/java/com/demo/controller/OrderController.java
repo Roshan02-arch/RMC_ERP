@@ -2,7 +2,11 @@ package com.demo.controller;
 
 import com.demo.entity.Order;
 import com.demo.entity.OrderStatus;
+import com.demo.entity.PaymentRecord;
 import com.demo.entity.User;
+import com.demo.entity.ConcreteProductStock;
+import com.demo.repository.ConcreteProductStockRepository;
+import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.UserRepository;
 import com.demo.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -25,6 +30,12 @@ public class OrderController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private PaymentRecordRepository paymentRecordRepository;
+
+    @Autowired
+    private ConcreteProductStockRepository productStockRepository;
+
     // ✅ GET ALL
     @GetMapping
     public List<Order> getAllOrders() {
@@ -34,6 +45,51 @@ public class OrderController {
     @GetMapping("/my-orders/{userId}")
     public List<Order> getMyOrders(@PathVariable Long userId) {
         return orderService.getOrdersByUserId(userId);
+    }
+
+    @GetMapping("/{orderId}/payments")
+    public ResponseEntity<?> getOrderPayments(@PathVariable String orderId) {
+        List<Map<String, Object>> response = paymentRecordRepository
+                .findByOrder_OrderIdOrderByPaidAtDesc(orderId)
+                .stream()
+                .map(this::toPaymentView)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{orderId}/payments")
+    public ResponseEntity<?> addOrderPayment(
+            @PathVariable String orderId,
+            @RequestBody Map<String, Object> payload
+    ) {
+        try {
+            Order order = orderService.getOrderByOrderId(orderId);
+
+            double amount = Double.parseDouble(String.valueOf(payload.getOrDefault("amount", 0)));
+            String method = String.valueOf(payload.getOrDefault("method", "")).trim();
+
+            if (amount <= 0 || method.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Invalid payment details"));
+            }
+
+            PaymentRecord record = new PaymentRecord();
+            record.setOrder(order);
+            record.setAmount(amount);
+            record.setMethod(method);
+            record.setPaidAt(LocalDateTime.now());
+            record.setTransactionId("TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+
+            PaymentRecord saved = paymentRecordRepository.save(record);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Payment saved successfully",
+                    "payment", toPaymentView(saved)
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "Unable to save payment"));
+        }
     }
 
     // ✅ GET BY ID
@@ -79,12 +135,21 @@ public class OrderController {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid order details"));
             }
 
+            ConcreteProductStock product = productStockRepository.findByNameIgnoreCase(grade)
+                    .orElse(null);
+            if (product == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Selected product is not available"));
+            }
+            if (product.getAvailableQuantity() < quantity) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Out of stock. Please wait for restock."));
+            }
+
             Order order = new Order();
             order.setOrderId("ORD-" + UUID.randomUUID().toString().substring(0, 8));
             order.setGrade(grade);
             order.setQuantity(quantity);
             order.setAddress(address);
-            order.setStatus(OrderStatus.PENDING_APPROVAL);
+            order.setStatus(OrderStatus.APPROVED);
             order.setTotalPrice(resolveTotalPrice(grade, quantity, payload.get("totalPrice")));
             order.setUser(user);
 
@@ -97,6 +162,9 @@ public class OrderController {
             }
 
             Order saved = orderService.createOrder(order);
+            product.setAvailableQuantity(product.getAvailableQuantity() - quantity);
+            product.setUpdatedAt(LocalDateTime.now());
+            productStockRepository.save(product);
 
             return ResponseEntity.ok(Map.of(
                     "message", "Order created successfully",
@@ -174,5 +242,16 @@ public class OrderController {
                 rate = 0;
         }
         return rate * quantity;
+    }
+
+    private Map<String, Object> toPaymentView(PaymentRecord p) {
+        return Map.of(
+                "id", p.getId(),
+                "orderId", p.getOrder() != null ? p.getOrder().getOrderId() : null,
+                "amount", p.getAmount(),
+                "method", p.getMethod(),
+                "paidAt", p.getPaidAt(),
+                "transactionId", p.getTransactionId()
+        );
     }
 }
