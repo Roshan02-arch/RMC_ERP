@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../utils/auth";
 
 type UserProfile = {
@@ -97,27 +97,32 @@ const Navbar = () => {
     return null;
   }
 
+  const navItemClass = ({ isActive }: { isActive: boolean }) =>
+    isActive
+      ? "text-indigo-600 font-semibold border-b-2 border-indigo-600 pb-1"
+      : "hover:text-indigo-600 transition";
+
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-end gap-6 text-sm font-medium text-gray-700">
-        <Link to="/home" className="hover:text-indigo-600 transition">
+        <NavLink to="/home" className={navItemClass}>
           Home
-        </Link>
-        <Link to="/dashboard" className="hover:text-indigo-600 transition">
+        </NavLink>
+        <NavLink to="/dashboard" className={navItemClass}>
           Dashboard
-        </Link>
-        <Link to="/purchaseproduct" className="hover:text-indigo-600 transition">
+        </NavLink>
+        <NavLink to="/purchaseproduct" className={navItemClass}>
           Purchase Product
-        </Link>
-        <Link to="/delivery-tracking" className="hover:text-indigo-600 transition">
+        </NavLink>
+        <NavLink to="/delivery-tracking" className={navItemClass}>
           Delivery Tracking
-        </Link>
-        <Link to="/billing-payment" className="hover:text-indigo-600 transition">
+        </NavLink>
+        <NavLink to="/billing-payment" className={navItemClass}>
           Billing & Payment
-        </Link>
-        <Link to="/quality-access" className="hover:text-indigo-600 transition">
+        </NavLink>
+        <NavLink to="/quality-access" className={navItemClass}>
           Quality Access
-        </Link>
+        </NavLink>
         {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
         <button
           type="button"

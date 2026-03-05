@@ -6,6 +6,7 @@ public class DispatchScheduleRequest {
 
     private LocalDateTime dispatchDateTime;
     private String tripPlanning;
+    private Integer plannedTrips;
     private String deliverySequence;
     private LocalDateTime expectedArrivalTime;
 
@@ -23,6 +24,14 @@ public class DispatchScheduleRequest {
 
     public void setTripPlanning(String tripPlanning) {
         this.tripPlanning = tripPlanning;
+    }
+
+    public Integer getPlannedTrips() {
+        return plannedTrips;
+    }
+
+    public void setPlannedTrips(Integer plannedTrips) {
+        this.plannedTrips = plannedTrips;
     }
 
     public String getDeliverySequence() {

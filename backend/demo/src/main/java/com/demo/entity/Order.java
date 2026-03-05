@@ -33,6 +33,17 @@ public class Order {
     private String deliverySequence;
     private String tripPlanning;
     private String latestNotification;
+    private Integer delayInMinutes;
+    private Double liveLatitude;
+    private Double liveLongitude;
+    private Integer plannedTrips;
+    private Integer completedTrips;
+    private Double totalFuelUsedLiters;
+    private LocalDateTime deliveredAt;
+    private String deliveryConfirmationDetails;
+
+    @Enumerated(EnumType.STRING)
+    private DeliveryTrackingStatus deliveryTrackingStatus;
 
     @Enumerated(EnumType.STRING)
     private OrderStatus status;
@@ -200,6 +211,78 @@ public class Order {
 
     public void setLatestNotification(String latestNotification) {
         this.latestNotification = latestNotification;
+    }
+
+    public Integer getDelayInMinutes() {
+        return delayInMinutes;
+    }
+
+    public void setDelayInMinutes(Integer delayInMinutes) {
+        this.delayInMinutes = delayInMinutes;
+    }
+
+    public Double getLiveLatitude() {
+        return liveLatitude;
+    }
+
+    public void setLiveLatitude(Double liveLatitude) {
+        this.liveLatitude = liveLatitude;
+    }
+
+    public Double getLiveLongitude() {
+        return liveLongitude;
+    }
+
+    public void setLiveLongitude(Double liveLongitude) {
+        this.liveLongitude = liveLongitude;
+    }
+
+    public Integer getPlannedTrips() {
+        return plannedTrips;
+    }
+
+    public void setPlannedTrips(Integer plannedTrips) {
+        this.plannedTrips = plannedTrips;
+    }
+
+    public Integer getCompletedTrips() {
+        return completedTrips;
+    }
+
+    public void setCompletedTrips(Integer completedTrips) {
+        this.completedTrips = completedTrips;
+    }
+
+    public Double getTotalFuelUsedLiters() {
+        return totalFuelUsedLiters;
+    }
+
+    public void setTotalFuelUsedLiters(Double totalFuelUsedLiters) {
+        this.totalFuelUsedLiters = totalFuelUsedLiters;
+    }
+
+    public LocalDateTime getDeliveredAt() {
+        return deliveredAt;
+    }
+
+    public void setDeliveredAt(LocalDateTime deliveredAt) {
+        this.deliveredAt = deliveredAt;
+    }
+
+    public String getDeliveryConfirmationDetails() {
+        return deliveryConfirmationDetails;
+    }
+
+    public void setDeliveryConfirmationDetails(String deliveryConfirmationDetails) {
+        this.deliveryConfirmationDetails = deliveryConfirmationDetails;
+    }
+
+    public DeliveryTrackingStatus getDeliveryTrackingStatus() {
+        return deliveryTrackingStatus;
+    }
+
+    public void setDeliveryTrackingStatus(DeliveryTrackingStatus deliveryTrackingStatus) {
+        this.deliveryTrackingStatus = deliveryTrackingStatus;
     }
 
     public OrderStatus getStatus() {

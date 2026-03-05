@@ -23,6 +23,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<HomePage />} />
 
         {/* Auth */}
         <Route path="/login" element={<Login />} />
@@ -39,7 +40,6 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<HomePage />} />
           <Route path="/home" element={<HomePage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/purchaseproduct" element={<PurchaseProduct />} />
