@@ -34,7 +34,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { ThemeContext } from "../../App";
+import { ThemeContext } from "../../utils/ThemeContext";
 
 interface Order {
   id: number;
@@ -183,11 +183,6 @@ const AdminDashboard = () => {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
-  // Reset page when search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
 
   const statsCards = [
     {
@@ -467,7 +462,10 @@ const AdminDashboard = () => {
                   type="text"
                   placeholder="Search orders..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
                 />
               </div>

@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { normalizeRole } from "../utils/auth";
 import { Sun, Moon, Bell, User, LogOut, Settings, Search } from "lucide-react";
-import { ThemeContext } from "../App";
+import { ThemeContext } from "../utils/ThemeContext";
 
 type UserProfile = {
   id: number;

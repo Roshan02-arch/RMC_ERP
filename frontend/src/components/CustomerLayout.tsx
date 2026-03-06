@@ -10,7 +10,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { ThemeContext } from "../App";
+import { ThemeContext } from "../utils/ThemeContext";
 import Navbar from "./Navbar";
 
 const navItems = [

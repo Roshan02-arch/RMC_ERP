@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { User, LogOut, Settings, ChevronDown, Sun, Moon, Menu, X } from "lucide-react";
-import { ThemeContext } from "../App";
+import { ThemeContext } from "../utils/ThemeContext";
 
 type UserNavbarProps = {
   variant?: "overlay" | "solid";

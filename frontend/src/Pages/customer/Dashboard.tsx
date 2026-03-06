@@ -14,7 +14,7 @@ import {
   Moon,
 } from "lucide-react";
 import { normalizeRole } from "../../utils/auth";
-import { ThemeContext } from "../../App";
+import { ThemeContext } from "../../utils/ThemeContext";
 
 interface Order {
   id: number;
@@ -111,11 +111,6 @@ const Dashboard = () => {
     safePage * PAGE_SIZE,
   );
 
-  // Reset to page 1 when the search filter changes
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm]);
-
   const stats = [
     { label: "Total Orders", value: total, icon: ShoppingCart, iconBg: "bg-blue-100 dark:bg-blue-900/30", iconColor: "text-blue-600 dark:text-blue-400" },
     { label: "Pending", value: pending, icon: Clock, iconBg: "bg-amber-100 dark:bg-amber-900/30", iconColor: "text-amber-600 dark:text-amber-400" },
@@ -192,7 +187,10 @@ const Dashboard = () => {
               type="text"
               placeholder="Search orders…"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 pl-9 pr-3 py-2 text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>

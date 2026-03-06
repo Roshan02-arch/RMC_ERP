@@ -17,7 +17,7 @@ import {
   ChevronRight,
   UserX,
 } from "lucide-react";
-import { ThemeContext } from "../../App";
+import { ThemeContext } from "../../utils/ThemeContext";
 
 interface User {
   id: number;
@@ -98,10 +98,6 @@ const AdminUsers = () => {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, roleFilter]);
 
   // Counts
   const totalCount = users.length;
@@ -249,13 +245,19 @@ const AdminUsers = () => {
                 type="text"
                 placeholder="Search users..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 outline-none transition"
               />
             </div>
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 outline-none transition"
             >
               {ROLE_OPTIONS.map((r) => (

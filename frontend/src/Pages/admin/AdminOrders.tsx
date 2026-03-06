@@ -20,7 +20,7 @@ import {
   ArrowUpDown,
   PackageOpen,
 } from "lucide-react";
-import { ThemeContext } from "../../App";
+import { ThemeContext } from "../../utils/ThemeContext";
 
 interface Order {
   id: number;
@@ -52,6 +52,28 @@ const NAV_ITEMS = [
 ];
 
 type SortKey = "orderId" | "grade" | "quantity" | "totalPrice" | "status";
+
+const SortHeader = ({
+  label,
+  field,
+  sortKey,
+  onSort,
+}: {
+  label: string;
+  field: SortKey;
+  sortKey: SortKey;
+  onSort: (key: SortKey) => void;
+}) => (
+  <th
+    className="px-6 py-4 text-left cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+    onClick={() => onSort(field)}
+  >
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <ArrowUpDown size={14} className={sortKey === field ? "text-blue-500" : "opacity-40"} />
+    </span>
+  </th>
+);
 
 const AdminOrders = () => {
   const navigate = useNavigate();
@@ -130,10 +152,6 @@ const AdminOrders = () => {
     currentPage * ITEMS_PER_PAGE,
   );
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
-
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortAsc((prev) => !prev);
@@ -192,18 +210,6 @@ const AdminOrders = () => {
   const pendingCount = orders.filter((o) => o.status === "PENDING_APPROVAL").length;
   const approvedCount = orders.filter((o) => o.status === "APPROVED").length;
   const rejectedCount = orders.filter((o) => o.status === "REJECTED").length;
-
-  const SortHeader = ({ label, field }: { label: string; field: SortKey }) => (
-    <th
-      className="px-6 py-4 text-left cursor-pointer select-none hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-      onClick={() => handleSort(field)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        <ArrowUpDown size={14} className={sortKey === field ? "text-blue-500" : "opacity-40"} />
-      </span>
-    </th>
-  );
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-900 flex">
@@ -350,13 +356,19 @@ const AdminOrders = () => {
                 type="text"
                 placeholder="Search orders..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-9 pr-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 outline-none transition"
               />
             </div>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
               className="px-4 py-2.5 border border-gray-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 outline-none transition"
             >
               {STATUS_OPTIONS.map((s) => (
@@ -380,11 +392,11 @@ const AdminOrders = () => {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-slate-700/50 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
-                    <SortHeader label="Order ID" field="orderId" />
-                    <SortHeader label="Grade" field="grade" />
-                    <SortHeader label="Quantity" field="quantity" />
-                    <SortHeader label="Total" field="totalPrice" />
-                    <SortHeader label="Status" field="status" />
+                    <SortHeader label="Order ID" field="orderId" sortKey={sortKey} onSort={handleSort} />
+                    <SortHeader label="Grade" field="grade" sortKey={sortKey} onSort={handleSort} />
+                    <SortHeader label="Quantity" field="quantity" sortKey={sortKey} onSort={handleSort} />
+                    <SortHeader label="Total" field="totalPrice" sortKey={sortKey} onSort={handleSort} />
+                    <SortHeader label="Status" field="status" sortKey={sortKey} onSort={handleSort} />
                     <th className="px-6 py-4 text-left">Action</th>
                   </tr>
                 </thead>
