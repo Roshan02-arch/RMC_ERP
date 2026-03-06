@@ -13,17 +13,20 @@ import com.demo.entity.Driver;
 import com.demo.entity.Order;
 import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
+import com.demo.entity.PaymentRecord;
 import com.demo.entity.TransitMixer;
 import com.demo.entity.User;
 import com.demo.repository.DispatchTripRecordRepository;
 import com.demo.repository.DriverRepository;
 import com.demo.repository.OrderAssignmentRepository;
 import com.demo.repository.OrderRepository;
+import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.TransitMixerRepository;
 import com.demo.repository.UserRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -56,6 +59,9 @@ public class AdminController {
 
     @Autowired
     private DispatchTripRecordRepository dispatchTripRecordRepository;
+
+    @Autowired
+    private PaymentRecordRepository paymentRecordRepository;
 
 
     // ? 1. Get All Orders
@@ -176,16 +182,34 @@ public class AdminController {
     }
 
     @DeleteMapping("/orders/{orderId}")
+    @Transactional
     public ResponseEntity<?> deleteOrder(@PathVariable String orderId) {
         try {
-            int deleted = orderRepository.deleteByOrderId(orderId);
-
-            if (deleted == 0) {
+            Order order = orderRepository.findByOrderId(orderId).orElse(null);
+            if (order == null) {
                 return ResponseEntity.status(404).body(Map.of(
                         "message", "Order not found",
                         "orderId", orderId
                 ));
             }
+
+            Long internalOrderId = order.getId();
+            List<DispatchTripRecord> tripRecords = dispatchTripRecordRepository.findByOrder_IdOrderByTripNumberAsc(internalOrderId);
+            if (!tripRecords.isEmpty()) {
+                dispatchTripRecordRepository.deleteAll(tripRecords);
+            }
+
+            List<PaymentRecord> paymentRecords = paymentRecordRepository.findByOrder_Id(internalOrderId);
+            if (!paymentRecords.isEmpty()) {
+                paymentRecordRepository.deleteAll(paymentRecords);
+            }
+
+            OrderAssignment assignment = orderAssignmentRepository.findByOrder_Id(internalOrderId).orElse(null);
+            if (assignment != null) {
+                orderAssignmentRepository.delete(assignment);
+            }
+
+            orderRepository.delete(order);
 
             return ResponseEntity.ok(Map.of(
                     "message", "Order deleted successfully",

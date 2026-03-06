@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { normalizeRole } from "../../utils/auth";
 import gorakhSignature from "../../assets/gorakh-signature.svg";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 type QualityRow = {
   orderId: string;
@@ -51,6 +52,7 @@ const getSignatureImageDataUrl = async (): Promise<string | null> => {
 
 const QualityAccess = () => {
   const navigate = useNavigate();
+  const { showMessage, dialogNode } = useCenteredDialog();
   const [rows, setRows] = useState<QualityRow[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -179,7 +181,7 @@ const QualityAccess = () => {
       pdf.save(`Quality_Certificate_${selected.orderId}.pdf`);
     } catch (error) {
       console.error("Certificate PDF download failed", error);
-      alert("Unable to download certificate right now.");
+      await showMessage("Unable to download certificate right now.");
     }
   };
 
@@ -322,6 +324,7 @@ const QualityAccess = () => {
           </>
         )}
       </main>
+      {dialogNode}
     </div>
   );
 };

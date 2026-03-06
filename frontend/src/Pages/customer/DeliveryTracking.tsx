@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 
 type Order = {
@@ -30,6 +30,18 @@ type TrackingView = {
   liveLongitude?: number;
 };
 
+type RawMaterialOrder = {
+  id: number;
+  materialName: string;
+  quantity: number;
+  unit: string;
+  pricePerUnit: number;
+  totalPrice: number;
+  address: string;
+  status: string;
+  createdAt: string;
+};
+
 const stageClass = (active: boolean) =>
   active
     ? "bg-indigo-600 text-white border-indigo-600"
@@ -53,7 +65,12 @@ const buildMapEmbedUrl = (latitude: number, longitude: number) => {
 
 const DeliveryTracking = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = (location.state as { selectedOrderId?: string; selectedRawOrderId?: number } | null) || null;
+  const lockedOrderId = navState?.selectedOrderId || "";
+  const lockedRawOrderId = Number(navState?.selectedRawOrderId || 0);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [rawOrders, setRawOrders] = useState<RawMaterialOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [loading, setLoading] = useState(true);
   const [trackingView, setTrackingView] = useState<TrackingView | null>(null);
@@ -74,12 +91,35 @@ const DeliveryTracking = () => {
     const fetchOrders = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`http://localhost:8080/api/orders/my-orders/${userId}`);
-        const data = await res.json();
-        const items = Array.isArray(data) ? data : [];
-        setOrders(items);
-        if (items.length > 0) {
-          setSelectedOrderId(items[0].orderId);
+        const [concreteRes, rawRes] = await Promise.all([
+          fetch(`http://localhost:8080/api/orders/my-orders/${userId}`),
+          fetch(`http://localhost:8080/api/inventory/raw-material-orders/${userId}`),
+        ]);
+        const [concreteData, rawData] = await Promise.all([concreteRes.json(), rawRes.json()]);
+        let concreteItems: Order[] = Array.isArray(concreteData) ? concreteData : [];
+        let rawItems: RawMaterialOrder[] = Array.isArray(rawData) ? rawData : [];
+
+        concreteItems.sort((a, b) => b.id - a.id);
+        rawItems.sort((a, b) => b.id - a.id);
+
+        if (lockedOrderId) {
+          concreteItems = concreteItems.filter((o) => o.orderId === lockedOrderId);
+        }
+        if (lockedRawOrderId > 0) {
+          rawItems = rawItems.filter((o) => o.id === lockedRawOrderId);
+        }
+
+        setOrders(concreteItems);
+        setRawOrders(rawItems);
+
+        if (lockedOrderId && concreteItems.length > 0) {
+          setSelectedOrderId(concreteItems[0].orderId);
+        } else if (lockedRawOrderId > 0 && rawItems.length > 0) {
+          setSelectedOrderId(`RAW:${rawItems[0].id}`);
+        } else if (concreteItems.length > 0) {
+          setSelectedOrderId(concreteItems[0].orderId);
+        } else if (rawItems.length > 0) {
+          setSelectedOrderId(`RAW:${rawItems[0].id}`);
         }
       } catch (error) {
         console.error("Failed to load delivery tracking data", error);
@@ -89,11 +129,11 @@ const DeliveryTracking = () => {
     };
 
     void fetchOrders();
-  }, [navigate]);
+  }, [navigate, lockedOrderId, lockedRawOrderId]);
 
   useEffect(() => {
     const userId = localStorage.getItem("userId");
-    if (!selectedOrderId || !userId) {
+    if (!selectedOrderId || !userId || selectedOrderId.startsWith("RAW:")) {
       setTrackingView(null);
       setLastGpsSyncAt(null);
       return;
@@ -147,11 +187,16 @@ const DeliveryTracking = () => {
   }, [selectedOrderId]);
 
   const selectedOrder = useMemo(
-    () => orders.find((order) => order.orderId === selectedOrderId) || null,
+    () => (selectedOrderId.startsWith("RAW:") ? null : orders.find((order) => order.orderId === selectedOrderId) || null),
     [orders, selectedOrderId]
   );
+  const selectedRawOrder = useMemo(() => {
+    if (!selectedOrderId.startsWith("RAW:")) return null;
+    const id = Number(selectedOrderId.replace("RAW:", ""));
+    return rawOrders.find((order) => order.id === id) || null;
+  }, [rawOrders, selectedOrderId]);
 
-  const normalizedStatus = normalizeDeliveryStatus(trackingView?.dispatchStatus || selectedOrder?.status);
+  const normalizedStatus = normalizeDeliveryStatus(trackingView?.dispatchStatus || selectedOrder?.status || selectedRawOrder?.status);
   const isScheduled = ["APPROVED", "IN_PRODUCTION", "SCHEDULED", "DISPATCHED", "IN_TRANSIT", "DELIVERED"].includes(normalizedStatus);
   const isDispatched = ["DISPATCHED", "IN_TRANSIT", "DELIVERED"].includes(normalizedStatus);
   const isInTransit = ["IN_TRANSIT", "DELIVERED"].includes(normalizedStatus);
@@ -175,7 +220,7 @@ const DeliveryTracking = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">Select Order</label>
           {loading ? (
             <p className="text-sm text-gray-500">Loading orders...</p>
-          ) : orders.length === 0 ? (
+          ) : orders.length === 0 && rawOrders.length === 0 ? (
             <p className="text-sm text-gray-500">No orders found.</p>
           ) : (
             <select
@@ -184,23 +229,41 @@ const DeliveryTracking = () => {
               className="w-full md:w-96 px-3 py-2 border border-gray-300 rounded-md"
             >
               {orders.map((order) => (
-                <option key={order.id} value={order.orderId}>
+                <option key={`concrete-${order.id}`} value={order.orderId}>
                   {order.orderId} ({order.status})
+                </option>
+              ))}
+              {rawOrders.map((order) => (
+                <option key={`raw-${order.id}`} value={`RAW:${order.id}`}>
+                  RMO-{order.id} ({order.status})
                 </option>
               ))}
             </select>
           )}
         </div>
 
-        {selectedOrder && (
+        {(selectedOrder || selectedRawOrder) && (
           <>
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Dispatch Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
-                <p><span className="font-semibold">Dispatch Status:</span> {toStatusLabel(normalizedStatus)}</p>
-                <p><span className="font-semibold">Transit Mixer Number:</span> {trackingView?.transitMixerNumber || selectedOrder.transitMixerNumber || "-"}</p>
-                <p><span className="font-semibold">Driver Details:</span> {trackingView?.driverName || selectedOrder.driverName || "-"} {(trackingView?.driverShift || selectedOrder.driverShift) ? `(${trackingView?.driverShift || selectedOrder.driverShift})` : ""}</p>
-                <p><span className="font-semibold">Dispatch Date & Time:</span> {trackingView?.dispatchDateTime || selectedOrder.dispatchDateTime || "-"}</p>
+                {selectedOrder ? (
+                  <>
+                    <p><span className="font-semibold">Dispatch Status:</span> {toStatusLabel(normalizedStatus)}</p>
+                    <p><span className="font-semibold">Transit Mixer Number:</span> {trackingView?.transitMixerNumber || selectedOrder.transitMixerNumber || "-"}</p>
+                    <p><span className="font-semibold">Driver Details:</span> {trackingView?.driverName || selectedOrder.driverName || "-"} {(trackingView?.driverShift || selectedOrder.driverShift) ? `(${trackingView?.driverShift || selectedOrder.driverShift})` : ""}</p>
+                    <p><span className="font-semibold">Dispatch Date & Time:</span> {trackingView?.dispatchDateTime || selectedOrder.dispatchDateTime || "-"}</p>
+                  </>
+                ) : (
+                  <>
+                    <p><span className="font-semibold">Order Type:</span> Raw Material</p>
+                    <p><span className="font-semibold">Order ID:</span> RMO-{selectedRawOrder!.id}</p>
+                    <p><span className="font-semibold">Material:</span> {selectedRawOrder!.materialName}</p>
+                    <p><span className="font-semibold">Quantity:</span> {selectedRawOrder!.quantity} {selectedRawOrder!.unit}</p>
+                    <p><span className="font-semibold">Price:</span> Rs.{selectedRawOrder!.pricePerUnit} / {selectedRawOrder!.unit}</p>
+                    <p><span className="font-semibold">Total:</span> Rs.{selectedRawOrder!.totalPrice}</p>
+                  </>
+                )}
               </div>
             </div>
 
@@ -212,7 +275,7 @@ const DeliveryTracking = () => {
                 <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isInTransit)}`}>In Transit</div>
                 <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isDelivered)}`}>Delivered</div>
               </div>
-              {hasLiveLocation ? (
+              {selectedOrder && hasLiveLocation ? (
                 <div className="mt-4 space-y-3">
                   <div className="rounded-xl overflow-hidden border border-gray-300 bg-gray-50">
                     <iframe
@@ -241,6 +304,11 @@ const DeliveryTracking = () => {
                     </a>
                   </div>
                 </div>
+              ) : selectedRawOrder ? (
+                <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-700">
+                  Raw material order status is updated by admin. Current status:{" "}
+                  <span className="font-semibold">{toStatusLabel(normalizedStatus)}</span>
+                </div>
               ) : (
                 <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
                   Live GPS location: Not available yet. Waiting for admin/tracking update with coordinates.
@@ -251,10 +319,10 @@ const DeliveryTracking = () => {
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Estimated Delivery Time</h2>
               <p className="text-sm text-gray-700">
-                <span className="font-semibold">ETA:</span> {trackingView?.expectedArrivalTime || selectedOrder.expectedArrivalTime || "-"}
+                <span className="font-semibold">ETA:</span> {selectedOrder ? trackingView?.expectedArrivalTime || selectedOrder.expectedArrivalTime || "-" : "-"}
               </p>
               <p className="text-sm text-indigo-700 mt-2">
-                Delay/Update Notification: {trackingView?.latestNotification || selectedOrder.latestNotification || "No updates"}
+                Delay/Update Notification: {selectedOrder ? trackingView?.latestNotification || selectedOrder.latestNotification || "No updates" : "Status updates available from admin."}
               </p>
             </div>
 
@@ -266,7 +334,9 @@ const DeliveryTracking = () => {
               <p className="text-sm text-gray-700 mt-2">
                 <span className="font-semibold">Confirmation:</span>{" "}
                 {isDelivered
-                  ? "Concrete delivered successfully. Next stage: Billing and Payment."
+                  ? selectedOrder
+                    ? "Concrete delivered successfully. Next stage: Billing and Payment."
+                    : "Raw material delivered successfully."
                   : "Delivery confirmation will be available after completion."}
               </p>
             </div>

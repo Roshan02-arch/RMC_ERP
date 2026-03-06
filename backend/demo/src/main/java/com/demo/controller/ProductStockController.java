@@ -91,6 +91,32 @@ public class ProductStockController {
         }
     }
 
+    @DeleteMapping({"/api/admin/inventory/products/{id}", "/api/inventory/products/{id}"})
+    public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
+        return performDeleteProduct(id);
+    }
+
+    // Compatibility endpoint in case DELETE is blocked by proxy/browser setup.
+    @PostMapping("/api/admin/inventory/products/{id}/delete")
+    public ResponseEntity<?> deleteProductViaPost(@PathVariable Long id) {
+        return performDeleteProduct(id);
+    }
+
+    private ResponseEntity<?> performDeleteProduct(Long id) {
+        try {
+            if (!productRepository.existsById(id)) {
+                return ResponseEntity.status(404).body(Map.of("message", "Product not found"));
+            }
+            productRepository.deleteById(id);
+            return ResponseEntity.ok(Map.of("message", "Product deleted successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "message", "Unable to delete product",
+                    "error", e.getMessage() == null ? "" : e.getMessage()
+            ));
+        }
+    }
+
     private Map<String, Object> toView(ConcreteProductStock p) {
         return Map.of(
                 "id", p.getId(),
@@ -105,6 +131,10 @@ public class ProductStockController {
     }
 
     private void ensureDefaultProducts() {
+        if (productRepository.count() > 0) {
+            return;
+        }
+
         List<Map<String, Object>> defaults = Arrays.asList(
                 Map.of("name", "M10", "price", 4200d, "stock", 120d, "imageUrl", "https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80"),
                 Map.of("name", "M15", "price", 4600d, "stock", 120d, "imageUrl", "https://images.unsplash.com/photo-1599707254554-027aeb4deacd?auto=format&fit=crop&w=1200&q=80"),

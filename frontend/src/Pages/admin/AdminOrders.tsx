@@ -14,6 +14,15 @@ const AdminOrders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(null);
+  const [showMessageBox, setShowMessageBox] = useState(false);
+  const [messageText, setMessageText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const openMessageBox = (message: string) => {
+    setMessageText(message);
+    setShowMessageBox(true);
+  };
 
   const fetchOrders = async () => {
     try {
@@ -65,31 +74,40 @@ const AdminOrders = () => {
   });
 
   const deleteOrder = async (orderId: string) => {
-    const confirmed = window.confirm("Are you sure you want to delete this order?");
-    if (!confirmed) {
-      return;
-    }
+    try {
+      setIsDeleting(true);
+      const res = await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(orderId)}`, {
+        method: "DELETE",
+      });
 
-    const res = await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(orderId)}`, {
-      method: "DELETE",
-    });
-
-    if (!res.ok) {
-      const raw = await res.text();
-      let message = "Delete failed";
-      try {
-        const data = JSON.parse(raw);
-        message = data.message || message;
-      } catch {
-        if (raw) {
-          message = raw;
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = "Delete failed";
+        try {
+          const data = JSON.parse(raw);
+          const backendMessage = data.message || "";
+          const backendError = data.error || "";
+          message = backendMessage || message;
+          if (backendError) {
+            message = `${message}: ${backendError}`;
+          }
+        } catch {
+          if (raw) {
+            message = raw;
+          }
         }
+        openMessageBox(message);
+        return;
       }
-      alert(message);
-      return;
-    }
 
-    void fetchOrders();
+      void fetchOrders();
+      openMessageBox("Order deleted successfully.");
+    } catch (err) {
+      console.error("Delete failed", err);
+      openMessageBox("Unable to delete order. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -205,7 +223,8 @@ const AdminOrders = () => {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => deleteOrder(order.orderId)}
+                          onClick={() => setConfirmOrderId(order.orderId)}
+                          disabled={isDeleting}
                           className="px-4 py-1 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-md transition"
                         >
                           Delete
@@ -226,6 +245,55 @@ const AdminOrders = () => {
           </div>
         </div>
       </main>
+
+      {confirmOrderId && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
+            <h3 className="text-lg font-semibold text-gray-800">Confirm Delete</h3>
+            <p className="text-sm text-gray-600 mt-2">Are you sure you want to delete this order?</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOrderId(null)}
+                className="px-4 py-2 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const orderId = confirmOrderId;
+                  setConfirmOrderId(null);
+                  if (orderId) {
+                    void deleteOrder(orderId);
+                  }
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-red-600 hover:bg-red-500 text-white"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMessageBox && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
+            <h3 className="text-lg font-semibold text-gray-800">Message</h3>
+            <p className="text-sm text-gray-700 mt-2">{messageText}</p>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowMessageBox(false)}
+                className="px-4 py-2 text-sm rounded-md bg-gray-900 hover:bg-gray-800 text-white"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

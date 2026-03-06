@@ -49,11 +49,6 @@ const Dashboard = () => {
       .catch((err) => console.error("Fetch error:", err));
   }, [navigate]);
 
-  const logout = () => {
-    localStorage.clear();
-    navigate("/login");
-  };
-
   const total = orders.length;
   const pending = orders.filter((order) => getDashboardStatus(order) === "PENDING_APPROVAL").length;
   const delivered = orders.filter((order) => getDashboardStatus(order) === "DELIVERED").length;
@@ -70,31 +65,8 @@ const Dashboard = () => {
   });
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col p-6 space-y-6 pt-24">
-        <h2 className="text-2xl font-bold text-indigo-400">RMC ERP</h2>
-        <nav className="flex flex-col space-y-4 text-sm">
-          <button
-            type="button"
-            onClick={() => navigate("/dashboard")}
-            className="text-left hover:text-indigo-400 transition"
-          >
-            Dashboard
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/purchaseproduct")}
-            className="text-left hover:text-indigo-400 transition"
-          >
-            Orders
-          </button>
-          <button onClick={logout} className="text-left text-red-400 hover:text-red-300 transition">
-            Logout
-          </button>
-        </nav>
-      </aside>
-
-      <main className="flex-1 p-8 pt-24">
+    <div className="min-h-screen bg-gray-100">
+      <main className="max-w-7xl mx-auto px-6 pt-24 pb-10">
         <h1 className="text-3xl font-bold text-gray-800 mb-8">Welcome Customer</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">

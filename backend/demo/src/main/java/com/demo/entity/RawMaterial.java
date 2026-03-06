@@ -19,6 +19,7 @@ public class RawMaterial {
     private String unit;
     private String supplier;
     private String imageUrl;
+    private double pricePerUnit;
     private double reorderLevel;
     private LocalDateTime updatedAt;
 
@@ -68,6 +69,14 @@ public class RawMaterial {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public double getPricePerUnit() {
+        return pricePerUnit;
+    }
+
+    public void setPricePerUnit(double pricePerUnit) {
+        this.pricePerUnit = pricePerUnit;
     }
 
     public double getReorderLevel() {

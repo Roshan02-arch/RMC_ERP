@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const { showMessage, dialogNode } = useCenteredDialog();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,13 +24,13 @@ const AdminLogin = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        alert(data.message || "Login failed");
+        await showMessage(data.message || "Login failed");
         return;
       }
 
       const role = normalizeRole(data.role);
       if (role !== "ADMIN") {
-        alert("Not an admin account");
+        await showMessage("Not an admin account");
         return;
       }
 
@@ -72,6 +74,7 @@ const AdminLogin = () => {
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
+      {dialogNode}
     </div>
   );
 };

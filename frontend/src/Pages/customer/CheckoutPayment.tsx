@@ -17,6 +17,10 @@ type CreatedConcreteOrder = {
   totalPrice: number;
 };
 
+type CreatedRawMaterialOrder = {
+  id: number;
+};
+
 const CART_KEY = "checkout_cart";
 
 const CheckoutPayment = () => {
@@ -90,7 +94,7 @@ const CheckoutPayment = () => {
     return data as CreatedConcreteOrder;
   };
 
-  const createMaterialOrder = async (item: CartItem, userId: string) => {
+  const createMaterialOrder = async (item: CartItem, userId: string): Promise<CreatedRawMaterialOrder> => {
     const response = await fetch("http://localhost:8080/api/inventory/raw-material-orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,6 +107,8 @@ const CheckoutPayment = () => {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || `Unable to create raw material order for ${item.name}`);
+    const orderId = Number(data?.order?.id);
+    return { id: Number.isFinite(orderId) ? orderId : 0 };
   };
 
   const recordPayment = async (orderId: string, amount: number, paymentMethod: string) => {
@@ -155,6 +161,7 @@ const CheckoutPayment = () => {
     try {
       setLoading(true);
       const createdOrderIds: string[] = [];
+      const createdRawOrderIds: number[] = [];
       for (const item of concreteItems) {
         const created = await createConcreteOrder(item, userId);
         createdOrderIds.push(created.orderId);
@@ -166,18 +173,27 @@ const CheckoutPayment = () => {
             ? `BANK_TRANSFER:${bankName.trim()}|A/C:${bankAccountNo.trim()}|IFSC:${bankIfsc.trim().toUpperCase()}|UTR:${bankUtr.trim()}`
             : "CASH_ON_DELIVERY";
 
-        await recordPayment(created.orderId, item.pricePerUnit * item.quantity, payMethod);
+        if (method !== "CASH_ON_DELIVERY") {
+          await recordPayment(created.orderId, item.pricePerUnit * item.quantity, payMethod);
+        }
       }
 
       for (const item of materialItems) {
-        await createMaterialOrder(item, userId);
+        const createdRaw = await createMaterialOrder(item, userId);
+        if (createdRaw.id > 0) {
+          createdRawOrderIds.push(createdRaw.id);
+        }
       }
 
       localStorage.removeItem(CART_KEY);
+      const firstConcreteOrderId = createdOrderIds[0] || "";
+      const firstRawOrderId = createdRawOrderIds[0] || 0;
       navigate("/order-success", {
         state: {
-          orderId: createdOrderIds[0] || "RAW-MATERIAL-ORDER",
+          orderId: firstConcreteOrderId || (firstRawOrderId ? `RMO-${firstRawOrderId}` : "RAW-MATERIAL-ORDER"),
           paymentId: method === "CASH_ON_DELIVERY" ? "COD-REGISTERED" : "PAYMENT-SUCCESS",
+          selectedOrderId: firstConcreteOrderId,
+          selectedRawOrderId: firstRawOrderId || undefined,
         },
       });
     } catch (e) {
@@ -217,7 +233,14 @@ const CheckoutPayment = () => {
                     </div>
                     <div className="mt-3 flex items-center gap-3">
                       <input type="number" min={1} value={item.quantity} onChange={(e) => updateQty(item.key, Number(e.target.value))} className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                      <p className="text-sm text-gray-700">{item.pricePerUnit > 0 ? `Rs.${item.pricePerUnit} / ${item.unit}` : `${item.unit}`}</p>
+                      <div className="text-sm text-gray-700">
+                        <p>{item.pricePerUnit > 0 ? `Rs.${item.pricePerUnit} / ${item.unit}` : `${item.unit}`}</p>
+                        {item.pricePerUnit > 0 && (
+                          <p className="text-xs font-semibold text-gray-800 mt-1">
+                            Amount: Rs.{(item.pricePerUnit * item.quantity).toFixed(2)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

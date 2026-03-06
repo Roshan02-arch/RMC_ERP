@@ -104,43 +104,48 @@ const Navbar = () => {
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-end gap-6 text-sm font-medium text-gray-700">
-        <NavLink to="/home" className={navItemClass}>
-          Home
+      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between text-sm font-medium text-gray-700">
+        <NavLink to="/home" className="text-2xl font-bold text-indigo-500 hover:text-indigo-400 transition">
+          RMC ERP
         </NavLink>
-        <NavLink to="/dashboard" className={navItemClass}>
-          Dashboard
-        </NavLink>
-        <NavLink to="/purchaseproduct" className={navItemClass}>
-          Purchase Product
-        </NavLink>
-        <NavLink to="/delivery-tracking" className={navItemClass}>
-          Delivery Tracking
-        </NavLink>
-        <NavLink to="/billing-payment" className={navItemClass}>
-          Billing & Payment
-        </NavLink>
-        <NavLink to="/quality-access" className={navItemClass}>
-          Quality Access
-        </NavLink>
-        {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
-        <button
-          type="button"
-          onClick={() => setShowProfile((prev) => !prev)}
-          className="hover:text-indigo-600 transition text-lg"
-          title="Profile"
-        >
-          &#128100;
-        </button>
-        <button
-          onClick={() => {
-            localStorage.clear();
-            navigate("/login");
-          }}
-          className="text-red-500 hover:text-red-400 transition"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-6">
+          <NavLink to="/home" className={navItemClass}>
+            Home
+          </NavLink>
+          <NavLink to="/dashboard" className={navItemClass}>
+            My Orders
+          </NavLink>
+          <NavLink to="/purchaseproduct" className={navItemClass}>
+            Purchase Product
+          </NavLink>
+          <NavLink to="/delivery-tracking" className={navItemClass}>
+            Delivery Tracking
+          </NavLink>
+          <NavLink to="/billing-payment" className={navItemClass}>
+            Billing & Payment
+          </NavLink>
+          <NavLink to="/quality-access" className={navItemClass}>
+            Quality Access
+          </NavLink>
+          {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
+          <button
+            type="button"
+            onClick={() => setShowProfile((prev) => !prev)}
+            className="hover:text-indigo-600 transition text-lg"
+            title="Profile"
+          >
+            &#128100;
+          </button>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              navigate("/login");
+            }}
+            className="text-red-500 hover:text-red-400 transition"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {showProfile && (

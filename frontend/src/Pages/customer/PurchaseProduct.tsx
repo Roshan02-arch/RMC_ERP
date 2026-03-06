@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 type OrderStatus =
   | "PENDING_APPROVAL"
@@ -34,6 +35,7 @@ type RawMaterial = {
   quantity: number;
   unit: string;
   supplier: string;
+  pricePerUnit: number;
   reorderLevel: number;
 };
 
@@ -42,6 +44,8 @@ type RawMaterialOrder = {
   materialName: string;
   quantity: number;
   unit: string;
+  pricePerUnit: number;
+  totalPrice: number;
   address: string;
   status: string;
   createdAt: string;
@@ -62,6 +66,7 @@ const isNewStock = (createdAt: string) =>
 
 const PurchaseProduct = () => {
   const navigate = useNavigate();
+  const { showConfirm, showMessage, dialogNode } = useCenteredDialog();
   const [selectedTab, setSelectedTab] = useState<"concrete" | "material">("concrete");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -90,9 +95,8 @@ const PurchaseProduct = () => {
     }
   };
 
-  const saveAndGoCheckout = (cart: CartItem[]) => {
+  const saveCart = (cart: CartItem[]) => {
     localStorage.setItem("checkout_cart", JSON.stringify(cart));
-    navigate("/checkout-payment", { state: { cart } });
   };
 
   const addConcreteToCart = (product: ProductStock) => {
@@ -133,8 +137,8 @@ const PurchaseProduct = () => {
       ];
     }
 
+    saveCart(nextCart);
     showToast(`${product.name} added to cart`);
-    saveAndGoCheckout(nextCart);
   };
 
   const addMaterialToCart = (material: RawMaterial) => {
@@ -170,13 +174,13 @@ const PurchaseProduct = () => {
           name: material.name,
           quantity: qty,
           unit: material.unit,
-          pricePerUnit: 0,
+          pricePerUnit: material.pricePerUnit || 0,
         },
       ];
     }
 
+    saveCart(nextCart);
     showToast(`${material.name} added to cart`);
-    saveAndGoCheckout(nextCart);
   };
 
   const fetchProducts = async () => {
@@ -238,32 +242,46 @@ const PurchaseProduct = () => {
   }, []);
 
   const deleteConcreteOrder = async (order: ConcreteOrder) => {
-    if (!window.confirm(`Delete order ${order.orderId}?`)) return;
+    if (!(await showConfirm(`Delete order ${order.orderId}?`, "Confirm Delete", "Delete"))) return;
     try {
       setDeletingOrderId(order.id);
-      const response = await fetch(`http://localhost:8080/api/orders/${order.id}`, { method: "DELETE" });
+      let response: Response;
+      if (order.orderId) {
+        response = await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(order.orderId)}`, {
+          method: "DELETE",
+        });
+      } else {
+        response = await fetch(`http://localhost:8080/api/orders/${order.id}`, { method: "DELETE" });
+      }
+
+      // Fallback for older API behavior that deletes by numeric id.
+      if (!response.ok && order.id) {
+        response = await fetch(`http://localhost:8080/api/orders/${order.id}`, { method: "DELETE" });
+      }
+
       if (!response.ok) {
-        alert("Unable to delete order");
+        const payload = await response.json().catch(() => null);
+        await showMessage(payload?.message || "Unable to delete order");
         return;
       }
-      setOrders((prev) => prev.filter((item) => item.id !== order.id));
-      alert("Order deleted successfully.");
+      setOrders((prev) => prev.filter((item) => item.id !== order.id && item.orderId !== order.orderId));
+      await showMessage("Order deleted successfully.");
     } finally {
       setDeletingOrderId(null);
     }
   };
 
   const deleteMaterialOrder = async (order: RawMaterialOrder) => {
-    if (!window.confirm(`Delete raw material order #${order.id}?`)) return;
+    if (!(await showConfirm(`Delete raw material order #${order.id}?`, "Confirm Delete", "Delete"))) return;
     const response = await fetch(`http://localhost:8080/api/inventory/raw-material-orders/${order.id}`, {
       method: "DELETE",
     });
     if (!response.ok) {
-      alert("Unable to delete raw material order");
+      await showMessage("Unable to delete raw material order");
       return;
     }
     setMaterialOrders((prev) => prev.filter((item) => item.id !== order.id));
-    alert("Raw material order deleted.");
+    await showMessage("Raw material order deleted.");
   };
 
   return (
@@ -272,13 +290,20 @@ const PurchaseProduct = () => {
         <div className="w-full max-w-7xl bg-white rounded-2xl shadow-xl p-8">
           <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
             <h2 className="text-2xl font-bold text-gray-800">RMC Store</h2>
-            <button
-              type="button"
-              onClick={() => navigate("/checkout-payment")}
-              className="px-5 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold"
-            >
-              Go To Checkout
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("/checkout-payment")}
+                className="px-5 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+              >
+                Go To Cart
+              </button>
+              {toast && (
+                <div className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm font-semibold">
+                  {toast}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="rounded-xl border border-gray-200 p-1 flex w-fit mb-6">
@@ -319,6 +344,9 @@ const PurchaseProduct = () => {
                     </div>
                     <p className="text-sm text-gray-600 mt-1">Rs.{p.pricePerUnit} / {p.unit}</p>
                     <p className="text-xs text-gray-500 mt-1">Available: {p.availableQuantity} {p.unit}</p>
+                    <p className={`text-xs font-semibold mt-1 ${p.availableQuantity > 0 ? "text-green-600" : "text-red-600"}`}>
+                      {p.availableQuantity > 0 ? "in stock" : "out of stock"}
+                    </p>
                     <div className="mt-3 flex items-center gap-2">
                       <input
                         type="number"
@@ -349,7 +377,11 @@ const PurchaseProduct = () => {
                   <div className="p-4">
                     <p className="font-semibold text-gray-900">{m.name}</p>
                     <p className="text-sm text-gray-600 mt-1">Supplier: {m.supplier || "-"}</p>
+                    <p className="text-sm text-gray-600 mt-1">Rs.{m.pricePerUnit} / {m.unit}</p>
                     <p className="text-xs text-gray-500 mt-1">Available: {m.quantity} {m.unit}</p>
+                    <p className={`text-xs font-semibold mt-1 ${m.quantity > 0 ? "text-green-600" : "text-red-600"}`}>
+                      {m.quantity > 0 ? "in stock" : "out of stock"}
+                    </p>
                     <div className="mt-3 flex items-center gap-2">
                       <input
                         type="number"
@@ -402,6 +434,8 @@ const PurchaseProduct = () => {
               <div key={order.id} className="bg-gray-50 p-5 rounded-xl border border-gray-200">
                 <p className="text-sm"><strong>Material:</strong> {order.materialName}</p>
                 <p className="text-sm"><strong>Quantity:</strong> {order.quantity} {order.unit}</p>
+                <p className="text-sm"><strong>Price:</strong> Rs.{order.pricePerUnit} / {order.unit}</p>
+                <p className="text-sm"><strong>Total:</strong> Rs.{order.totalPrice}</p>
                 <p className="text-sm"><strong>Address:</strong> {order.address}</p>
                 <p className="text-sm"><strong>Date:</strong> {new Date(order.createdAt).toLocaleString()}</p>
                 <button
@@ -415,11 +449,7 @@ const PurchaseProduct = () => {
           </div>
         </div>
       </div>
-      {toast && (
-        <div className="fixed top-24 right-6 z-[60] bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-semibold">
-          {toast}
-        </div>
-      )}
+      {dialogNode}
     </div>
   );
 };

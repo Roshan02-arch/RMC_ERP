@@ -19,6 +19,8 @@ public class RawMaterialOrder {
     private String materialName;
     private double quantity;
     private String unit;
+    private double pricePerUnit;
+    private double totalPrice;
     private String address;
     private String status;
     private LocalDateTime createdAt;
@@ -85,6 +87,22 @@ public class RawMaterialOrder {
 
     public void setUnit(String unit) {
         this.unit = unit;
+    }
+
+    public double getPricePerUnit() {
+        return pricePerUnit;
+    }
+
+    public void setPricePerUnit(double pricePerUnit) {
+        this.pricePerUnit = pricePerUnit;
+    }
+
+    public double getTotalPrice() {
+        return totalPrice;
+    }
+
+    public void setTotalPrice(double totalPrice) {
+        this.totalPrice = totalPrice;
     }
 
     public String getAddress() {

@@ -3,7 +3,16 @@ import { useLocation, useNavigate } from "react-router-dom";
 const OrderSuccess = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = (location.state as { orderId?: string; paymentId?: string } | null) || null;
+  const state = (location.state as {
+    orderId?: string;
+    paymentId?: string;
+    selectedOrderId?: string;
+    selectedRawOrderId?: number;
+  } | null) || null;
+  const paymentRef = String(state?.paymentId || "").toUpperCase();
+  const isCodPayment = paymentRef.includes("COD");
+  const paymentStatusLabel = isCodPayment ? "Pending" : "Successful";
+  const paymentStatusClass = isCodPayment ? "text-amber-600" : "text-emerald-700";
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f3f4f6_0%,#e5e7eb_100%)] flex items-center justify-center px-4">
@@ -23,7 +32,7 @@ const OrderSuccess = () => {
           </div>
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wide">Payment Status</p>
-            <p className="mt-1 text-lg font-semibold text-emerald-700">Successful</p>
+            <p className={`mt-1 text-lg font-semibold ${paymentStatusClass}`}>{paymentStatusLabel}</p>
           </div>
         </div>
 
@@ -43,7 +52,8 @@ const OrderSuccess = () => {
             onClick={() =>
               navigate("/billing-payment", {
                 state: {
-                  selectedOrderId: state?.orderId || "",
+                  selectedOrderId: state?.selectedOrderId || state?.orderId || "",
+                  selectedRawOrderId: state?.selectedRawOrderId,
                   successMessage: "Order placed successfully. Invoice opened for this order.",
                 },
               })
@@ -53,7 +63,14 @@ const OrderSuccess = () => {
             Billing and Invoice
           </button>
           <button
-            onClick={() => navigate("/delivery-tracking")}
+            onClick={() =>
+              navigate("/delivery-tracking", {
+                state: {
+                  selectedOrderId: state?.selectedOrderId || state?.orderId || "",
+                  selectedRawOrderId: state?.selectedRawOrderId,
+                },
+              })
+            }
             className="px-5 py-2.5 rounded-lg bg-gray-200 text-gray-800 text-sm font-semibold"
           >
             Track Order

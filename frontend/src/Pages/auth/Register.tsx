@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 interface RegisterFormData {
   name: string;
@@ -14,6 +15,7 @@ interface RegisterFormData {
 
 function Register() {
   const navigate = useNavigate();
+  const { showMessage, dialogNode } = useCenteredDialog();
 
   const [formData, setFormData] = useState<RegisterFormData>({
     name: "",
@@ -115,7 +117,7 @@ const [showPassword, setShowPassword] = useState(false);
         { headers: { "Content-Type": "application/json" } }
       );
 
-      alert(response.data?.message || "Account created successfully! Redirecting to Login...");
+      await showMessage(response.data?.message || "Account created successfully! Redirecting to Login...");
       navigate("/login");
 
     } catch (error: unknown) {
@@ -126,7 +128,7 @@ const [showPassword, setShowPassword] = useState(false);
         }
 
         if (errMsg === "User already exists") {
-          alert("User already exists");
+          await showMessage("User already exists");
         } else {
           setErrorMsg(errMsg);
         }
@@ -335,6 +337,7 @@ const [showPassword, setShowPassword] = useState(false);
         </p>
 
       </div>
+      {dialogNode}
     </div>
   );
 }

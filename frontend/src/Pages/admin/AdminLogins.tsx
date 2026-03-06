@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 interface PendingAdmin {
   id: number;
@@ -11,6 +12,7 @@ interface PendingAdmin {
 
 const AdminLogins = () => {
   const navigate = useNavigate();
+  const { showMessage, dialogNode } = useCenteredDialog();
   const [pendingAdmins, setPendingAdmins] = useState<PendingAdmin[]>([]);
 
   const fetchPendingAdmins = async () => {
@@ -56,7 +58,7 @@ const AdminLogins = () => {
       );
       const data = await res.json();
       if (!res.ok) {
-        alert(data.message || "Action failed");
+        await showMessage(data.message || "Action failed");
         return;
       }
       void fetchPendingAdmins();
@@ -175,6 +177,7 @@ const AdminLogins = () => {
           </div>
         </div>
       </main>
+      {dialogNode}
     </div>
   );
 };

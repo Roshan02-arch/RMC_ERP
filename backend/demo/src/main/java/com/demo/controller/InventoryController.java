@@ -46,6 +46,9 @@ public class InventoryController {
             if (rawMaterialRepository.findByNameIgnoreCase(rawMaterial.getName()).isPresent()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Material already exists"));
             }
+            if (rawMaterial.getPricePerUnit() <= 0) {
+                rawMaterial.setPricePerUnit(defaultMaterialPrice(rawMaterial.getName()));
+            }
             if (rawMaterial.getImageUrl() == null || rawMaterial.getImageUrl().isBlank()) {
                 rawMaterial.setImageUrl(defaultMaterialImage(rawMaterial.getName()));
             }
@@ -66,6 +69,9 @@ public class InventoryController {
             material.setSupplier(payload.getSupplier());
             material.setReorderLevel(payload.getReorderLevel());
             material.setQuantity(payload.getQuantity());
+            if (payload.getPricePerUnit() > 0) {
+                material.setPricePerUnit(payload.getPricePerUnit());
+            }
             if (payload.getImageUrl() != null && !payload.getImageUrl().isBlank()) {
                 material.setImageUrl(payload.getImageUrl());
             } else if (material.getImageUrl() == null || material.getImageUrl().isBlank()) {
@@ -277,11 +283,11 @@ public class InventoryController {
 
     private void ensureDefaultMaterials() {
         List<Map<String, Object>> defaults = Arrays.asList(
-                Map.of("name", "Cement", "unit", "kg", "supplier", "UltraTech", "reorder", 1000d, "imageUrl", "https://images.unsplash.com/photo-1618397746666-63405ce5d015?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Sand", "unit", "kg", "supplier", "Local River Supply", "reorder", 3000d, "imageUrl", "https://images.unsplash.com/photo-1508179522353-11ba468c4a1c?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Aggregates", "unit", "kg", "supplier", "Stone Crusher Plant", "reorder", 5000d, "imageUrl", "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Admixtures", "unit", "litre", "supplier", "Fosroc", "reorder", 300d, "imageUrl", "https://images.unsplash.com/photo-1581094271901-8022df4466f9?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Water", "unit", "litre", "supplier", "Plant Water Unit", "reorder", 10000d, "imageUrl", "https://images.unsplash.com/photo-1495774539583-885e02cca8c2?auto=format&fit=crop&w=1200&q=80")
+                Map.of("name", "Cement", "unit", "kg", "supplier", "UltraTech", "price", 8.0d, "reorder", 1000d, "imageUrl", "https://images.unsplash.com/photo-1618397746666-63405ce5d015?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Sand", "unit", "kg", "supplier", "Local River Supply", "price", 2.5d, "reorder", 3000d, "imageUrl", "https://images.unsplash.com/photo-1508179522353-11ba468c4a1c?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Aggregates", "unit", "kg", "supplier", "Stone Crusher Plant", "price", 3.0d, "reorder", 5000d, "imageUrl", "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Admixtures", "unit", "litre", "supplier", "Fosroc", "price", 120.0d, "reorder", 300d, "imageUrl", "https://images.unsplash.com/photo-1581094271901-8022df4466f9?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Water", "unit", "litre", "supplier", "Plant Water Unit", "price", 0.5d, "reorder", 10000d, "imageUrl", "https://images.unsplash.com/photo-1495774539583-885e02cca8c2?auto=format&fit=crop&w=1200&q=80")
         );
         for (Map<String, Object> row : defaults) {
             String name = String.valueOf(row.get("name"));
@@ -290,9 +296,12 @@ public class InventoryController {
                 RawMaterial material = existing.get();
                 if (material.getImageUrl() == null || material.getImageUrl().isBlank()) {
                     material.setImageUrl(String.valueOf(row.get("imageUrl")));
-                    material.setUpdatedAt(LocalDateTime.now());
-                    rawMaterialRepository.save(material);
                 }
+                if (material.getPricePerUnit() <= 0) {
+                    material.setPricePerUnit((Double) row.get("price"));
+                }
+                material.setUpdatedAt(LocalDateTime.now());
+                rawMaterialRepository.save(material);
                 continue;
             }
             RawMaterial material = new RawMaterial();
@@ -301,6 +310,7 @@ public class InventoryController {
             material.setReorderLevel((Double) row.get("reorder"));
             material.setSupplier(String.valueOf(row.get("supplier")));
             material.setUnit(String.valueOf(row.get("unit")));
+            material.setPricePerUnit((Double) row.get("price"));
             material.setImageUrl(String.valueOf(row.get("imageUrl")));
             material.setUpdatedAt(LocalDateTime.now());
             rawMaterialRepository.save(material);
@@ -325,5 +335,16 @@ public class InventoryController {
             return "https://images.unsplash.com/photo-1495774539583-885e02cca8c2?auto=format&fit=crop&w=1200&q=80";
         }
         return "https://images.unsplash.com/photo-1618397746666-63405ce5d015?auto=format&fit=crop&w=1200&q=80";
+    }
+
+    private double defaultMaterialPrice(String materialName) {
+        if (materialName == null) return 1.0d;
+        String name = materialName.toLowerCase();
+        if (name.contains("cement")) return 8.0d;
+        if (name.contains("sand")) return 2.5d;
+        if (name.contains("aggregate")) return 3.0d;
+        if (name.contains("admixture")) return 120.0d;
+        if (name.contains("water")) return 0.5d;
+        return 10.0d;
     }
 }

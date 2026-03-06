@@ -22,4 +22,6 @@ public interface OrderAssignmentRepository extends JpaRepository<OrderAssignment
     // 🔍 Find assignment by Plant ID
     List<OrderAssignment> findByPlant_Id(Long plantId);
 
+    void deleteByOrder_Id(Long orderId);
+
 }

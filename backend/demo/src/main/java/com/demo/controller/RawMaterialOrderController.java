@@ -68,6 +68,8 @@ public class RawMaterialOrderController {
             order.setMaterialName(material.getName());
             order.setQuantity(quantity);
             order.setUnit(material.getUnit());
+            order.setPricePerUnit(material.getPricePerUnit());
+            order.setTotalPrice(material.getPricePerUnit() * quantity);
             order.setAddress(address);
             order.setStatus("PENDING_APPROVAL");
             order.setCreatedAt(LocalDateTime.now());
@@ -148,6 +150,7 @@ public class RawMaterialOrderController {
                 "quantity", m.getQuantity(),
                 "unit", m.getUnit(),
                 "supplier", m.getSupplier(),
+                "pricePerUnit", m.getPricePerUnit(),
                 "reorderLevel", m.getReorderLevel(),
                 "imageUrl", m.getImageUrl() == null ? "" : m.getImageUrl()
         );
@@ -155,11 +158,11 @@ public class RawMaterialOrderController {
 
     private void ensureDefaultMaterialsForCustomer() {
         List<Map<String, Object>> defaults = Arrays.asList(
-                Map.of("name", "Cement", "unit", "kg", "supplier", "UltraTech", "reorder", 1000d, "imageUrl", "https://images.unsplash.com/photo-1618397746666-63405ce5d015?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Sand", "unit", "kg", "supplier", "Local River Supply", "reorder", 3000d, "imageUrl", "https://images.unsplash.com/photo-1508179522353-11ba468c4a1c?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Aggregates", "unit", "kg", "supplier", "Stone Crusher Plant", "reorder", 5000d, "imageUrl", "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Admixtures", "unit", "litre", "supplier", "Fosroc", "reorder", 300d, "imageUrl", "https://images.unsplash.com/photo-1581094271901-8022df4466f9?auto=format&fit=crop&w=1200&q=80"),
-                Map.of("name", "Water", "unit", "litre", "supplier", "Plant Water Unit", "reorder", 10000d, "imageUrl", "https://images.unsplash.com/photo-1495774539583-885e02cca8c2?auto=format&fit=crop&w=1200&q=80")
+                Map.of("name", "Cement", "unit", "kg", "supplier", "UltraTech", "price", 8.0d, "reorder", 1000d, "imageUrl", "https://images.unsplash.com/photo-1618397746666-63405ce5d015?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Sand", "unit", "kg", "supplier", "Local River Supply", "price", 2.5d, "reorder", 3000d, "imageUrl", "https://images.unsplash.com/photo-1508179522353-11ba468c4a1c?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Aggregates", "unit", "kg", "supplier", "Stone Crusher Plant", "price", 3.0d, "reorder", 5000d, "imageUrl", "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Admixtures", "unit", "litre", "supplier", "Fosroc", "price", 120.0d, "reorder", 300d, "imageUrl", "https://images.unsplash.com/photo-1581094271901-8022df4466f9?auto=format&fit=crop&w=1200&q=80"),
+                Map.of("name", "Water", "unit", "litre", "supplier", "Plant Water Unit", "price", 0.5d, "reorder", 10000d, "imageUrl", "https://images.unsplash.com/photo-1495774539583-885e02cca8c2?auto=format&fit=crop&w=1200&q=80")
         );
 
         for (Map<String, Object> row : defaults) {
@@ -169,9 +172,12 @@ public class RawMaterialOrderController {
                 RawMaterial material = existing.get();
                 if (material.getImageUrl() == null || material.getImageUrl().isBlank()) {
                     material.setImageUrl(String.valueOf(row.get("imageUrl")));
-                    material.setUpdatedAt(LocalDateTime.now());
-                    rawMaterialRepository.save(material);
                 }
+                if (material.getPricePerUnit() <= 0) {
+                    material.setPricePerUnit((Double) row.get("price"));
+                }
+                material.setUpdatedAt(LocalDateTime.now());
+                rawMaterialRepository.save(material);
                 continue;
             }
 
@@ -180,6 +186,7 @@ public class RawMaterialOrderController {
             material.setQuantity(0);
             material.setUnit(String.valueOf(row.get("unit")));
             material.setSupplier(String.valueOf(row.get("supplier")));
+            material.setPricePerUnit((Double) row.get("price"));
             material.setReorderLevel((Double) row.get("reorder"));
             material.setImageUrl(String.valueOf(row.get("imageUrl")));
             material.setUpdatedAt(LocalDateTime.now());
@@ -197,6 +204,8 @@ public class RawMaterialOrderController {
         row.put("materialName", o.getMaterialName());
         row.put("quantity", o.getQuantity());
         row.put("unit", o.getUnit());
+        row.put("pricePerUnit", o.getPricePerUnit());
+        row.put("totalPrice", o.getTotalPrice());
         row.put("address", Optional.ofNullable(o.getAddress()).orElse(""));
         row.put("status", Optional.ofNullable(o.getStatus()).orElse("PENDING_APPROVAL"));
         row.put("createdAt", o.getCreatedAt());

@@ -11,4 +11,6 @@ public interface DispatchTripRecordRepository extends JpaRepository<DispatchTrip
     List<DispatchTripRecord> findByOrder_IdOrderByTripNumberAsc(Long orderId);
 
     Optional<DispatchTripRecord> findByOrder_IdAndTripNumber(Long orderId, Integer tripNumber);
+
+    void deleteByOrder_Id(Long orderId);
 }

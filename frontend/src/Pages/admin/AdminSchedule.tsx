@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 interface Order {
   id: number;
@@ -63,6 +64,7 @@ const TRACKING_API = "http://localhost:8080/api/delivery-tracking";
 
 const AdminSchedule = () => {
   const navigate = useNavigate();
+  const { showMessage, dialogNode } = useCenteredDialog();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
 
@@ -93,25 +95,17 @@ const AdminSchedule = () => {
     liveLatitude: "",
     liveLongitude: "",
   });
-  const [availabilityWindow, setAvailabilityWindow] = useState({
-    windowStart: "",
-    windowEnd: "",
-  });
   const [vehicleAvailability, setVehicleAvailability] = useState<AvailabilityItem[]>([]);
   const [driverAvailability, setDriverAvailability] = useState<AvailabilityItem[]>([]);
   const [deliveryStatusForm, setDeliveryStatusForm] = useState({
     deliveryStatus: "SCHEDULED",
     delayInMinutes: "",
     delayUpdateMessage: "",
-    deliveredAt: "",
     deliveryConfirmationDetails: "",
   });
   const [tripForm, setTripForm] = useState({
     tripNumber: "1",
     status: "SCHEDULED",
-    scheduledDispatchTime: "",
-    actualDispatchTime: "",
-    deliveredTime: "",
     fuelUsedLiters: "",
     remarks: "",
     transitMixerNumber: "",
@@ -146,15 +140,9 @@ const AdminSchedule = () => {
       return;
     }
 
-    setAvailabilityWindow({
-      windowStart: selectedOrder.dispatchDateTime || "",
-      windowEnd: selectedOrder.expectedArrivalTime || "",
-    });
-
     setDeliveryStatusForm((prev) => ({
       ...prev,
       deliveryStatus: selectedOrder.deliveryTrackingStatusLabel || "SCHEDULED",
-      deliveredAt: selectedOrder.status === "DELIVERED" ? (selectedOrder.expectedArrivalTime || "") : "",
     }));
   }, [selectedOrder]);
 
@@ -188,12 +176,12 @@ const AdminSchedule = () => {
 
   const send = async (url: string, payload: Record<string, unknown>) => {
     if (!selectedOrderId) {
-      alert("Please select an order");
+      await showMessage("Please select an order");
       return false;
     }
     const adminUserId = localStorage.getItem("userId");
     if (!adminUserId) {
-      alert("Admin user not found. Please login again.");
+      await showMessage("Admin user not found. Please login again.");
       return false;
     }
     const separator = url.includes("?") ? "&" : "?";
@@ -211,23 +199,23 @@ const AdminSchedule = () => {
       message = text;
     }
     if (!res.ok) {
-      alert(message || "Request failed");
+      await showMessage(message || "Request failed");
       return false;
     }
-    alert(message || "Updated successfully");
+    await showMessage(message || "Updated successfully");
     await fetchOrders();
     return true;
   };
 
   const sendTrackingUpdate = async (payload: Record<string, unknown>) => {
     if (!selectedOrderId) {
-      alert("Please select an order");
+      await showMessage("Please select an order");
       return false;
     }
 
     const adminUserId = localStorage.getItem("userId");
     if (!adminUserId) {
-      alert("Admin user not found. Please login again.");
+      await showMessage("Admin user not found. Please login again.");
       return false;
     }
 
@@ -247,11 +235,11 @@ const AdminSchedule = () => {
     }
 
     if (!res.ok) {
-      alert(message || "Tracking update failed");
+      await showMessage(message || "Tracking update failed");
       return false;
     }
 
-    alert(message || "Tracking updated successfully");
+    await showMessage(message || "Tracking updated successfully");
     await fetchOrders();
     return true;
   };
@@ -305,21 +293,27 @@ const AdminSchedule = () => {
     }
   };
 
-  const loadAvailability = async () => {
+  const loadAvailability = async (windowStart: string, windowEnd: string, silent = false) => {
     const adminUserId = localStorage.getItem("userId");
     if (!adminUserId) {
-      alert("Admin user not found. Please login again.");
+      if (!silent) {
+        await showMessage("Admin user not found. Please login again.");
+      }
       return;
     }
-    if (!availabilityWindow.windowStart || !availabilityWindow.windowEnd) {
-      alert("Please provide both window start and window end");
+    if (!windowStart || !windowEnd) {
+      setVehicleAvailability([]);
+      setDriverAvailability([]);
+      if (!silent) {
+        await showMessage("Dispatch time and ETA are required to check availability.");
+      }
       return;
     }
 
     const res = await fetch(
       `${API}/dispatch/availability?adminUserId=${encodeURIComponent(adminUserId)}&windowStart=${encodeURIComponent(
-        availabilityWindow.windowStart
-      )}&windowEnd=${encodeURIComponent(availabilityWindow.windowEnd)}`
+        windowStart
+      )}&windowEnd=${encodeURIComponent(windowEnd)}`
     );
 
     const text = await res.text();
@@ -332,13 +326,23 @@ const AdminSchedule = () => {
 
     if (!res.ok) {
       const message = typeof data.message === "string" ? data.message : "Failed to load availability";
-      alert(message);
+      if (!silent) {
+        await showMessage(message);
+      }
       return;
     }
 
     setVehicleAvailability(Array.isArray(data.vehicles) ? (data.vehicles as AvailabilityItem[]) : []);
     setDriverAvailability(Array.isArray(data.drivers) ? (data.drivers as AvailabilityItem[]) : []);
   };
+
+  useEffect(() => {
+    void loadAvailability(
+      selectedOrder?.dispatchDateTime || "",
+      selectedOrder?.expectedArrivalTime || "",
+      true
+    );
+  }, [selectedOrder?.orderId, selectedOrder?.dispatchDateTime, selectedOrder?.expectedArrivalTime]);
 
   const onProductionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -366,15 +370,15 @@ const AdminSchedule = () => {
     const lon = Number(gps.liveLongitude);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      alert("Latitude and Longitude must be valid numbers");
+      await showMessage("Latitude and Longitude must be valid numbers");
       return;
     }
     if (lat < -90 || lat > 90) {
-      alert("Latitude must be between -90 and 90");
+      await showMessage("Latitude must be between -90 and 90");
       return;
     }
     if (lon < -180 || lon > 180) {
-      alert("Longitude must be between -180 and 180");
+      await showMessage("Longitude must be between -180 and 180");
       return;
     }
 
@@ -389,7 +393,7 @@ const AdminSchedule = () => {
 
     const adminUserId = localStorage.getItem("userId");
     if (!adminUserId || !selectedOrderId) {
-      alert("Please login again and select an order");
+      await showMessage("Please login again and select an order");
       return;
     }
 
@@ -402,10 +406,6 @@ const AdminSchedule = () => {
     if (deliveryStatusForm.delayInMinutes.trim() !== "") {
       payload.delayInMinutes = Number(deliveryStatusForm.delayInMinutes);
     }
-    if (deliveryStatusForm.deliveredAt.trim() !== "") {
-      payload.deliveredAt = deliveryStatusForm.deliveredAt;
-    }
-
     const res = await fetch(
       `${API}/orders/${selectedOrderId}/delivery-status?adminUserId=${encodeURIComponent(adminUserId)}`,
       {
@@ -424,11 +424,11 @@ const AdminSchedule = () => {
       message = text;
     }
     if (!res.ok) {
-      alert(message || "Delivery status update failed");
+      await showMessage(message || "Delivery status update failed");
       return;
     }
 
-    alert(message || "Delivery status updated");
+    await showMessage(message || "Delivery status updated");
     await fetchOrders();
     await fetchTripRecords();
     await fetchMonitoring();
@@ -439,7 +439,7 @@ const AdminSchedule = () => {
 
     const adminUserId = localStorage.getItem("userId");
     if (!adminUserId || !selectedOrderId) {
-      alert("Please login again and select an order");
+      await showMessage("Please login again and select an order");
       return;
     }
 
@@ -450,9 +450,6 @@ const AdminSchedule = () => {
       transitMixerNumber: tripForm.transitMixerNumber,
       driverName: tripForm.driverName,
     };
-    if (tripForm.scheduledDispatchTime) payload.scheduledDispatchTime = tripForm.scheduledDispatchTime;
-    if (tripForm.actualDispatchTime) payload.actualDispatchTime = tripForm.actualDispatchTime;
-    if (tripForm.deliveredTime) payload.deliveredTime = tripForm.deliveredTime;
     if (tripForm.fuelUsedLiters.trim() !== "") payload.fuelUsedLiters = Number(tripForm.fuelUsedLiters);
 
     const res = await fetch(
@@ -474,11 +471,11 @@ const AdminSchedule = () => {
     }
 
     if (!res.ok) {
-      alert(message || "Failed to save trip record");
+      await showMessage(message || "Failed to save trip record");
       return;
     }
 
-    alert(message || "Trip saved successfully");
+    await showMessage(message || "Trip saved successfully");
     await fetchOrders();
     await fetchTripRecords();
     await fetchMonitoring();
@@ -486,7 +483,7 @@ const AdminSchedule = () => {
 
   const onReschedule = async () => {
     if (!selectedOrderId) {
-      alert("Please select an order");
+      await showMessage("Please select an order");
       return;
     }
     await send("/reschedule", { ...production, ...dispatch, ...vehicle, rescheduleReason });
@@ -622,22 +619,19 @@ const AdminSchedule = () => {
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-800">Transit Mixer Availability</h2>
           <p className="text-sm text-gray-600">
-            Monitor available vehicles and drivers for selected dispatch time window.
+            Availability is checked using selected order dispatch time and ETA.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              type="datetime-local"
-              value={availabilityWindow.windowStart}
-              onChange={(e) => setAvailabilityWindow({ ...availabilityWindow, windowStart: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="datetime-local"
-              value={availabilityWindow.windowEnd}
-              onChange={(e) => setAvailabilityWindow({ ...availabilityWindow, windowEnd: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <button type="button" onClick={loadAvailability} className="px-4 py-2 bg-slate-800 text-white rounded-md">
+            <button
+              type="button"
+              onClick={() =>
+                void loadAvailability(
+                  selectedOrder?.dispatchDateTime || "",
+                  selectedOrder?.expectedArrivalTime || ""
+                )
+              }
+              className="px-4 py-2 bg-slate-800 text-white rounded-md md:col-start-1"
+            >
               Check Availability
             </button>
           </div>
@@ -697,12 +691,6 @@ const AdminSchedule = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
             <input
-              type="datetime-local"
-              value={deliveryStatusForm.deliveredAt}
-              onChange={(e) => setDeliveryStatusForm({ ...deliveryStatusForm, deliveredAt: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
               type="text"
               placeholder="Delay update message"
               value={deliveryStatusForm.delayUpdateMessage}
@@ -748,24 +736,6 @@ const AdminSchedule = () => {
               placeholder="Fuel used (liters)"
               value={tripForm.fuelUsedLiters}
               onChange={(e) => setTripForm({ ...tripForm, fuelUsedLiters: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="datetime-local"
-              value={tripForm.scheduledDispatchTime}
-              onChange={(e) => setTripForm({ ...tripForm, scheduledDispatchTime: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="datetime-local"
-              value={tripForm.actualDispatchTime}
-              onChange={(e) => setTripForm({ ...tripForm, actualDispatchTime: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="datetime-local"
-              value={tripForm.deliveredTime}
-              onChange={(e) => setTripForm({ ...tripForm, deliveredTime: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
             <input
@@ -898,6 +868,7 @@ const AdminSchedule = () => {
           </div>
         )}
       </main>
+      {dialogNode}
     </div>
   );
 };

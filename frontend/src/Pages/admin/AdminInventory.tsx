@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 type RawMaterial = {
   id: number;
@@ -7,6 +8,7 @@ type RawMaterial = {
   quantity: number;
   unit: string;
   supplier: string;
+  pricePerUnit: number;
   reorderLevel: number;
   updatedAt?: string;
 };
@@ -53,22 +55,54 @@ type ProductStock = {
   updatedAt: string;
 };
 
+type CustomerRawMaterialOrder = {
+  id: number;
+  userId: number;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  materialName: string;
+  quantity: number;
+  unit: string;
+  pricePerUnit: number;
+  totalPrice: number;
+  address: string;
+  status: string;
+  createdAt: string;
+};
+
 const API = "http://localhost:8080/api/admin/inventory";
+const MIN_STOCK_ALERT_THRESHOLD = 5;
+const CEMENT_BRANDS = [
+  "UltraTech",
+  "ACC",
+  "Ambuja",
+  "Shree Cement",
+  "Dalmia Cement",
+  "JK Cement",
+  "Birla Cement",
+  "Ramco Cement",
+];
+const isLowStock = (material: RawMaterial) => material.quantity <= MIN_STOCK_ALERT_THRESHOLD;
+const getReorderNeed = (material: RawMaterial) =>
+  Math.max(Number(material.reorderLevel || 0) - Number(material.quantity || 0), 0);
 
 const AdminInventory = () => {
   const navigate = useNavigate();
+  const { showMessage, showConfirm, showPrompt, showSelect, dialogNode } = useCenteredDialog();
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
-  const [alerts, setAlerts] = useState<RawMaterial[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [reportRows, setReportRows] = useState<StockReport[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [products, setProducts] = useState<ProductStock[]>([]);
+  const [customerRawOrders, setCustomerRawOrders] = useState<CustomerRawMaterialOrder[]>([]);
 
   const [period, setPeriod] = useState("daily");
   const [newMaterial, setNewMaterial] = useState({
     name: "",
     quantity: 0,
     unit: "kg",
+    pricePerUnit: 0,
     supplier: "",
     reorderLevel: 100,
   });
@@ -78,35 +112,40 @@ const AdminInventory = () => {
     availableQuantity: 0,
     unit: "m3",
   });
+  const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
 
-  const lowStockCount = useMemo(() => alerts.length, [alerts]);
+  const lowStockMaterials = useMemo(
+    () => materials.filter((material) => isLowStock(material)),
+    [materials]
+  );
+  const lowStockCount = useMemo(() => lowStockMaterials.length, [lowStockMaterials]);
 
   const fetchAll = async (selectedPeriod: string) => {
     try {
-      const [mRes, aRes, mvRes, rRes, poRes, pRes] = await Promise.all([
+      const [mRes, mvRes, rRes, poRes, pRes, croRes] = await Promise.all([
         fetch(`${API}/materials`),
-        fetch(`${API}/alerts`),
         fetch(`${API}/movements?period=${selectedPeriod}`),
         fetch(`${API}/reports/stock?period=${selectedPeriod}`),
         fetch(`${API}/purchase-orders`),
         fetch(`${API}/products`),
+        fetch("http://localhost:8080/api/admin/inventory/raw-material-orders"),
       ]);
 
-      const [mData, aData, mvData, rData, poData, pData] = await Promise.all([
+      const [mData, mvData, rData, poData, pData, croData] = await Promise.all([
         mRes.json(),
-        aRes.json(),
         mvRes.json(),
         rRes.json(),
         poRes.json(),
         pRes.json(),
+        croRes.json(),
       ]);
 
       setMaterials(Array.isArray(mData) ? mData : []);
-      setAlerts(Array.isArray(aData) ? aData : []);
       setMovements(Array.isArray(mvData) ? mvData : []);
       setReportRows(Array.isArray(rData) ? rData : []);
       setPurchaseOrders(Array.isArray(poData) ? poData : []);
       setProducts(Array.isArray(pData) ? pData : []);
+      setCustomerRawOrders(Array.isArray(croData) ? croData : []);
     } catch (error) {
       console.error("Failed to load inventory data", error);
     }
@@ -130,23 +169,27 @@ const AdminInventory = () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.message || "Unable to create material");
+      await showMessage(data.message || "Unable to create material");
       return;
     }
-    setNewMaterial({ name: "", quantity: 0, unit: "kg", supplier: "", reorderLevel: 100 });
+    setNewMaterial({ name: "", quantity: 0, unit: "kg", pricePerUnit: 0, supplier: "", reorderLevel: 100 });
     await fetchAll(period);
   };
 
   const adjustStock = async (material: RawMaterial, mode: "restock" | "consume") => {
-    const qty = prompt(`Enter ${mode} quantity for ${material.name}`);
+    const qty = await showPrompt(`Enter ${mode} quantity for ${material.name}`, {
+      title: "Update Stock",
+      placeholder: "Quantity",
+    });
     if (!qty) return;
     const parsed = Number(qty);
     if (!parsed || parsed <= 0) {
-      alert("Enter valid quantity");
+      await showMessage("Enter valid quantity");
       return;
     }
-    const reference = prompt("Reference ID (optional)") || "";
-    const note = prompt("Note (optional)") || "";
+    const reference =
+      (await showPrompt("Reference ID (optional)", { title: "Reference", placeholder: "Reference ID" })) || "";
+    const note = (await showPrompt("Note (optional)", { title: "Note", placeholder: "Note" })) || "";
 
     const res = await fetch(`${API}/materials/${material.id}/${mode}`, {
       method: "POST",
@@ -160,21 +203,41 @@ const AdminInventory = () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.message || "Stock update failed");
+      await showMessage(data.message || "Stock update failed");
       return;
     }
     await fetchAll(period);
   };
 
   const createPurchaseOrder = async (material: RawMaterial) => {
-    const qty = prompt(`Purchase order quantity for ${material.name}`);
+    const qty = await showPrompt(`Purchase order quantity for ${material.name}`, {
+      title: "Create Purchase Order",
+      placeholder: "Quantity",
+    });
     if (!qty) return;
     const parsed = Number(qty);
     if (!parsed || parsed <= 0) {
-      alert("Enter valid quantity");
+      await showMessage("Enter valid quantity");
       return;
     }
-    const supplier = prompt("Supplier name", material.supplier || "") || material.supplier;
+    const isCementMaterial = material.name.trim().toLowerCase().includes("cement");
+    let supplier = material.supplier || "";
+    if (isCementMaterial) {
+      const defaultBrand = CEMENT_BRANDS.includes(material.supplier) ? material.supplier : CEMENT_BRANDS[0];
+      const selectedBrand = await showSelect("Select cement brand", CEMENT_BRANDS, {
+        title: "Cement Brand",
+        defaultValue: defaultBrand,
+      });
+      if (!selectedBrand) return;
+      supplier = selectedBrand;
+    } else {
+      supplier =
+        (await showPrompt("Supplier name", {
+          title: "Supplier",
+          placeholder: "Supplier name",
+          defaultValue: material.supplier || "",
+        })) || material.supplier;
+    }
 
     const res = await fetch(`${API}/purchase-orders`, {
       method: "POST",
@@ -187,7 +250,7 @@ const AdminInventory = () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.message || "Unable to initiate purchase order");
+      await showMessage(data.message || "Unable to initiate purchase order");
       return;
     }
     await fetchAll(period);
@@ -202,7 +265,7 @@ const AdminInventory = () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.message || "Unable to add product");
+      await showMessage(data.message || "Unable to add product");
       return;
     }
     setNewProduct({ name: "", pricePerUnit: 0, availableQuantity: 0, unit: "m3" });
@@ -210,11 +273,14 @@ const AdminInventory = () => {
   };
 
   const restockProduct = async (id: number, name: string) => {
-    const qty = prompt(`Restock quantity for ${name}`);
+    const qty = await showPrompt(`Restock quantity for ${name}`, {
+      title: "Restock Product",
+      placeholder: "Quantity",
+    });
     if (!qty) return;
     const parsed = Number(qty);
     if (!parsed || parsed <= 0) {
-      alert("Enter valid quantity");
+      await showMessage("Enter valid quantity");
       return;
     }
     const res = await fetch(`${API}/products/${id}/restock`, {
@@ -224,10 +290,59 @@ const AdminInventory = () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.message || "Restock failed");
+      await showMessage(data.message || "Restock failed");
       return;
     }
     await fetchAll(period);
+  };
+
+  const deleteProduct = async (product: ProductStock) => {
+    const confirmed = await showConfirm(
+      `Delete product ${product.name}?`,
+      "Confirm Delete",
+      "Delete"
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingProductId(product.id);
+      let res = await fetch(`${API}/products/${product.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && (res.status === 404 || res.status === 405)) {
+        res = await fetch(`${API}/products/${product.id}/delete`, {
+          method: "POST",
+        });
+      }
+      if (!res.ok && res.status === 404) {
+        res = await fetch(`http://localhost:8080/api/inventory/products/${product.id}`, {
+          method: "DELETE",
+        });
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        await showMessage(data?.message || `Unable to delete product (HTTP ${res.status})`);
+        return;
+      }
+      setProducts((prev) => prev.filter((p) => p.id !== product.id));
+      await showMessage(data?.message || "Product deleted successfully");
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
+  const updateCustomerRawOrderStatus = async (id: number, status: string) => {
+    const res = await fetch(`http://localhost:8080/api/admin/inventory/raw-material-orders/${id}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      await showMessage(data?.message || "Unable to update raw material order status");
+      return;
+    }
+    setCustomerRawOrders((prev) => prev.map((order) => (order.id === id ? { ...order, status } : order)));
   };
 
   return (
@@ -284,6 +399,15 @@ const AdminInventory = () => {
           </div>
         </div>
 
+        {lowStockMaterials.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4">
+            <p className="font-semibold">Restock Alert</p>
+            <p className="text-sm mt-1">
+              {lowStockMaterials.length} material(s) are at or below stock 5. Please reorder now.
+            </p>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl shadow-md p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Concrete Product Stock (Customer Visible)</h2>
           <form onSubmit={createProduct} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
@@ -330,9 +454,21 @@ const AdminInventory = () => {
                     </td>
                     <td className="px-4 py-3">{new Date(p.createdAt).toLocaleString()}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => restockProduct(p.id, p.name)} className="px-3 py-1 text-xs bg-green-600 text-white rounded-md">
-                        Restock
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => restockProduct(p.id, p.name)}
+                          className="px-3 py-1 text-xs bg-green-600 text-white rounded-md"
+                        >
+                          Restock
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(p)}
+                          disabled={deletingProductId === p.id}
+                          className="px-3 py-1 text-xs bg-red-600 text-white rounded-md disabled:opacity-60"
+                        >
+                          {deletingProductId === p.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -341,7 +477,7 @@ const AdminInventory = () => {
           </div>
 
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Raw Material Management</h2>
-          <form onSubmit={createMaterial} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <form onSubmit={createMaterial} className="grid grid-cols-1 md:grid-cols-6 gap-3">
             <input
               value={newMaterial.name}
               onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })}
@@ -362,6 +498,13 @@ const AdminInventory = () => {
               className="px-3 py-2 border border-gray-300 rounded-md"
             />
             <input
+              type="number"
+              value={newMaterial.pricePerUnit}
+              onChange={(e) => setNewMaterial({ ...newMaterial, pricePerUnit: Number(e.target.value) })}
+              placeholder="Price per unit"
+              className="px-3 py-2 border border-gray-300 rounded-md"
+            />
+            <input
               value={newMaterial.supplier}
               onChange={(e) => setNewMaterial({ ...newMaterial, supplier: e.target.value })}
               placeholder="Supplier"
@@ -374,7 +517,7 @@ const AdminInventory = () => {
               placeholder="Reorder Level"
               className="px-3 py-2 border border-gray-300 rounded-md"
             />
-            <button type="submit" className="md:col-span-5 px-4 py-2 bg-indigo-600 text-white rounded-md">
+            <button type="submit" className="md:col-span-6 px-4 py-2 bg-indigo-600 text-white rounded-md">
               Add Material
             </button>
           </form>
@@ -389,7 +532,9 @@ const AdminInventory = () => {
                   <th className="px-4 py-3 text-left">Material</th>
                   <th className="px-4 py-3 text-left">Stock</th>
                   <th className="px-4 py-3 text-left">Reorder</th>
+                  <th className="px-4 py-3 text-left">Price</th>
                   <th className="px-4 py-3 text-left">Supplier</th>
+                  <th className="px-4 py-3 text-left">Alert</th>
                   <th className="px-4 py-3 text-left">Actions</th>
                 </tr>
               </thead>
@@ -397,16 +542,26 @@ const AdminInventory = () => {
                 {materials.map((m) => (
                   <tr key={m.id}>
                     <td className="px-4 py-3 font-medium">{m.name}</td>
-                    <td className={`px-4 py-3 ${m.quantity < m.reorderLevel ? "text-red-600 font-semibold" : ""}`}>
+                    <td className={`px-4 py-3 ${isLowStock(m) ? "text-red-600 font-semibold" : ""}`}>
                       {m.quantity} {m.unit}
                     </td>
-                    <td className="px-4 py-3">{m.reorderLevel} {m.unit}</td>
+                    <td className="px-4 py-3">{getReorderNeed(m)} {m.unit}</td>
+                    <td className="px-4 py-3">Rs.{m.pricePerUnit} / {m.unit}</td>
                     <td className="px-4 py-3">{m.supplier || "-"}</td>
+                    <td className="px-4 py-3">
+                      {isLowStock(m) ? (
+                        <span className="text-xs font-semibold text-red-600">
+                          Restock now (stock &lt;= 5)
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-green-600">Stock healthy</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <button onClick={() => adjustStock(m, "restock")} className="px-3 py-1 text-xs bg-green-600 text-white rounded-md">Restock</button>
                         <button onClick={() => adjustStock(m, "consume")} className="px-3 py-1 text-xs bg-amber-600 text-white rounded-md">Consume</button>
-                        <button onClick={() => createPurchaseOrder(m)} className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-md">Create PO</button>
+                        <button onClick={() => createPurchaseOrder(m)} className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-md">Reorder</button>
                       </div>
                     </td>
                   </tr>
@@ -419,16 +574,22 @@ const AdminInventory = () => {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Reorder Level Alerts</h2>
-            {alerts.length === 0 ? (
+            {lowStockMaterials.length === 0 ? (
               <p className="text-sm text-gray-500">No reorder alerts.</p>
             ) : (
               <div className="space-y-3">
-                {alerts.map((a) => (
+                {lowStockMaterials.map((a) => (
                   <div key={a.id} className="border border-red-200 bg-red-50 rounded-lg p-3">
                     <p className="font-semibold text-red-700">{a.name}</p>
                     <p className="text-sm text-red-700">
-                      Current: {a.quantity} {a.unit}, Reorder: {a.reorderLevel} {a.unit}
+                      Current: {a.quantity} {a.unit}, Minimum: {a.reorderLevel} {a.unit}
                     </p>
+                    <button
+                      onClick={() => createPurchaseOrder(a)}
+                      className="mt-2 px-3 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded-md"
+                    >
+                      Reorder
+                    </button>
                   </div>
                 ))}
               </div>
@@ -452,6 +613,74 @@ const AdminInventory = () => {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-md p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Customer Raw Material Orders</h2>
+          {customerRawOrders.length === 0 ? (
+            <p className="text-sm text-gray-500">No customer raw material orders.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-600 uppercase text-xs">
+                    <th className="px-4 py-3 text-left">Order</th>
+                    <th className="px-4 py-3 text-left">Customer</th>
+                    <th className="px-4 py-3 text-left">Material</th>
+                    <th className="px-4 py-3 text-left">Qty</th>
+                    <th className="px-4 py-3 text-left">Price</th>
+                    <th className="px-4 py-3 text-left">Total</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {customerRawOrders.map((order) => (
+                    <tr key={order.id}>
+                      <td className="px-4 py-3">RMO-{order.id}</td>
+                      <td className="px-4 py-3">
+                        <div>{order.customerName || "-"}</div>
+                        <div className="text-xs text-gray-500">{order.customerEmail || "-"}</div>
+                      </td>
+                      <td className="px-4 py-3">{order.materialName}</td>
+                      <td className="px-4 py-3">{order.quantity} {order.unit}</td>
+                      <td className="px-4 py-3">Rs.{order.pricePerUnit} / {order.unit}</td>
+                      <td className="px-4 py-3">Rs.{order.totalPrice}</td>
+                      <td className="px-4 py-3">{(order.status || "PENDING_APPROVAL").replaceAll("_", " ")}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => updateCustomerRawOrderStatus(order.id, "APPROVED")}
+                            className="px-3 py-1 text-xs bg-emerald-600 text-white rounded-md"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => updateCustomerRawOrderStatus(order.id, "DISPATCHED")}
+                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded-md"
+                          >
+                            Dispatch
+                          </button>
+                          <button
+                            onClick={() => updateCustomerRawOrderStatus(order.id, "DELIVERED")}
+                            className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-md"
+                          >
+                            Deliver
+                          </button>
+                          <button
+                            onClick={() => updateCustomerRawOrderStatus(order.id, "REJECTED")}
+                            className="px-3 py-1 text-xs bg-red-600 text-white rounded-md"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-md p-6">
@@ -514,6 +743,7 @@ const AdminInventory = () => {
           )}
         </div>
       </main>
+      {dialogNode}
     </div>
   );
 };
