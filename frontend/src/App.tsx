@@ -21,99 +21,96 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
-import { ThemeProvider } from "./utils/ThemeContext";
 
 function App() {
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
 
-          {/* Auth */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/logout" element={<Logout />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+        {/* Auth */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/logout" element={<Logout />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Customer */}
-          <Route
-            element={
-              <ProtectedRoute role="CUSTOMER">
-                <CustomerLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/home" element={<HomePage />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/purchaseproduct" element={<PurchaseProduct />} />
-            <Route path="/checkout-payment" element={<CheckoutPayment />} />
-            <Route path="/delivery-tracking" element={<DeliveryTracking />} />
-            <Route path="/billing-payment" element={<BillingPayment />} />
-            <Route path="/order-success" element={<OrderSuccess />} />
-            <Route path="/quality-access" element={<QualityAccess />} />
-            <Route path="/customize-profile" element={<CustomizeProfile />} />
-          </Route>
+        {/* Customer */}
+        <Route
+          element={
+            <ProtectedRoute role="CUSTOMER">
+              <CustomerLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/purchaseproduct" element={<PurchaseProduct />} />
+          <Route path="/checkout-payment" element={<CheckoutPayment />} />
+          <Route path="/delivery-tracking" element={<DeliveryTracking />} />
+          <Route path="/billing-payment" element={<BillingPayment />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
+          <Route path="/quality-access" element={<QualityAccess />} />
+          <Route path="/customize-profile" element={<CustomizeProfile />} />
+        </Route>
 
-          {/* Admin */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute role="ADMIN">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+        {/* Admin */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/admin/orders"
-            element={
-              <ProtectedRoute role="ADMIN">
-                <AdminOrders />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="/admin/orders"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminOrders />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute role="ADMIN">
-                <AdminUsers />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/admin/adminlogins"
-            element={
-              <ProtectedRoute role="ADMIN">
-                <AdminLogins />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="/admin/adminlogins"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminLogins />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/admin/schedule"
-            element={
-              <ProtectedRoute role="ADMIN">
-                <AdminSchedule />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="/admin/schedule"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminSchedule />
+            </ProtectedRoute>
+          }
+        />
 
-          <Route
-            path="/admin/inventory"
-            element={
-              <ProtectedRoute role="ADMIN">
-                <AdminInventory />
-              </ProtectedRoute>
-            }
-          />
+        <Route
+          path="/admin/inventory"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminInventory />
+            </ProtectedRoute>
+          }
+        />
 
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
+      </Routes>
+    </BrowserRouter>
   );
 }
 
