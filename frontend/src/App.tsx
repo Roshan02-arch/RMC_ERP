@@ -1,3 +1,5 @@
+import { createContext, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./Pages/auth/Login";
 import Logout from "./Pages/auth/Logout";
@@ -22,95 +24,132 @@ import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
 
+interface ThemeContextType {
+  darkMode: boolean;
+  toggleDarkMode: () => void;
+}
+
+export const ThemeContext = createContext<ThemeContextType>({
+  darkMode: false,
+  toggleDarkMode: () => {},
+});
+
+function ThemeProvider({ children }: { children: ReactNode }) {
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem("darkMode");
+    return stored === "true";
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+    localStorage.setItem("darkMode", String(darkMode));
+  }, [darkMode]);
+
+  const toggleDarkMode = () => setDarkMode((prev) => !prev);
+
+  return (
+    <ThemeContext.Provider value={{ darkMode, toggleDarkMode }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
 
-        {/* Auth */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/logout" element={<Logout />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Auth */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/logout" element={<Logout />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Customer */}
-        <Route
-          element={
-            <ProtectedRoute role="CUSTOMER">
-              <CustomerLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/purchaseproduct" element={<PurchaseProduct />} />
-          <Route path="/checkout-payment" element={<CheckoutPayment />} />
-          <Route path="/delivery-tracking" element={<DeliveryTracking />} />
-          <Route path="/billing-payment" element={<BillingPayment />} />
-          <Route path="/order-success" element={<OrderSuccess />} />
-          <Route path="/quality-access" element={<QualityAccess />} />
-          <Route path="/customize-profile" element={<CustomizeProfile />} />
-        </Route>
+          {/* Customer */}
+          <Route
+            element={
+              <ProtectedRoute role="CUSTOMER">
+                <CustomerLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/home" element={<HomePage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/purchaseproduct" element={<PurchaseProduct />} />
+            <Route path="/checkout-payment" element={<CheckoutPayment />} />
+            <Route path="/delivery-tracking" element={<DeliveryTracking />} />
+            <Route path="/billing-payment" element={<BillingPayment />} />
+            <Route path="/order-success" element={<OrderSuccess />} />
+            <Route path="/quality-access" element={<QualityAccess />} />
+            <Route path="/customize-profile" element={<CustomizeProfile />} />
+          </Route>
 
-        {/* Admin */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+          {/* Admin */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute role="ADMIN">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/admin/orders"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminOrders />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/admin/orders"
+            element={
+              <ProtectedRoute role="ADMIN">
+                <AdminOrders />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/admin/users"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminUsers />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute role="ADMIN">
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/admin/adminlogins"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminLogins />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/admin/adminlogins"
+            element={
+              <ProtectedRoute role="ADMIN">
+                <AdminLogins />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/admin/schedule"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminSchedule />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/admin/schedule"
+            element={
+              <ProtectedRoute role="ADMIN">
+                <AdminSchedule />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/admin/inventory"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminInventory />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/admin/inventory"
+            element={
+              <ProtectedRoute role="ADMIN">
+                <AdminInventory />
+              </ProtectedRoute>
+            }
+          />
 
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 
