@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on: (event: string, callback: (response: unknown) => void) => void;
+    };
+  }
+}
+
 type CartItem = {
   key: string;
   itemType: "concrete" | "material";
@@ -22,6 +31,19 @@ type CreatedRawMaterialOrder = {
 };
 
 const CART_KEY = "checkout_cart";
+const RAZORPAY_KEY = (import.meta.env.VITE_RAZORPAY_KEY as string | undefined) || "rzp_test_SP8t85FWw5iSOH";
+
+const loadRazorpayScript = async (): Promise<boolean> => {
+  if (window.Razorpay) return true;
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 const CheckoutPayment = () => {
   const navigate = useNavigate();
@@ -124,6 +146,53 @@ const CheckoutPayment = () => {
     if (!response.ok) throw new Error(data.message || "Unable to save payment");
   };
 
+  const openRazorpayCheckout = async (amount: number, selectedMethod: "UPI" | "BANK_TRANSFER") => {
+    const loaded = await loadRazorpayScript();
+    if (!loaded || !window.Razorpay) {
+      throw new Error("Unable to load Razorpay checkout");
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      const razorpay = new window.Razorpay({
+        key: RAZORPAY_KEY,
+        amount: Math.round(amount * 100),
+        currency: "INR",
+        name: "RMC ERP",
+        description: "Concrete Order Payment",
+        method: {
+          upi: selectedMethod === "UPI",
+          netbanking: selectedMethod === "BANK_TRANSFER",
+          card: false,
+          wallet: false,
+          emi: false,
+          paylater: false,
+        },
+        prefill: {
+          name: localStorage.getItem("username") || "",
+          email: localStorage.getItem("userEmail") || "",
+          contact: localStorage.getItem("userNumber") || "",
+        },
+        theme: {
+          color: "#111827",
+        },
+        handler: (response: { razorpay_payment_id?: string }) => {
+          const paymentId = response?.razorpay_payment_id || "";
+          if (!paymentId) {
+            reject(new Error("Payment failed"));
+            return;
+          }
+          resolve(paymentId);
+        },
+        modal: {
+          ondismiss: () => reject(new Error("Payment cancelled")),
+        },
+      });
+
+      razorpay.on("payment.failed", () => reject(new Error("Payment failed")));
+      razorpay.open();
+    });
+  };
+
   const handlePlaceOrderAndPay = async () => {
     setError("");
     const userId = localStorage.getItem("userId");
@@ -162,15 +231,24 @@ const CheckoutPayment = () => {
       setLoading(true);
       const createdOrderIds: string[] = [];
       const createdRawOrderIds: number[] = [];
+      let razorpayPaymentId = "";
+
+      if (method === "UPI" || method === "BANK_TRANSFER") {
+        if (concreteTotal <= 0) {
+          throw new Error("No payable concrete amount found for online payment.");
+        }
+        razorpayPaymentId = await openRazorpayCheckout(concreteTotal, method);
+      }
+
       for (const item of concreteItems) {
         const created = await createConcreteOrder(item, userId);
         createdOrderIds.push(created.orderId);
 
         const payMethod =
           method === "UPI"
-            ? `UPI:${upiId.trim()}`
+            ? `UPI:${upiId.trim()}|RAZORPAY:${razorpayPaymentId}`
             : method === "BANK_TRANSFER"
-            ? `BANK_TRANSFER:${bankName.trim()}|A/C:${bankAccountNo.trim()}|IFSC:${bankIfsc.trim().toUpperCase()}|UTR:${bankUtr.trim()}`
+            ? `BANK_TRANSFER:${bankName.trim()}|A/C:${bankAccountNo.trim()}|IFSC:${bankIfsc.trim().toUpperCase()}|UTR:${bankUtr.trim()}|RAZORPAY:${razorpayPaymentId}`
             : "CASH_ON_DELIVERY";
 
         if (method !== "CASH_ON_DELIVERY") {

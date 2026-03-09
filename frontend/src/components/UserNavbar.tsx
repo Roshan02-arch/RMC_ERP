@@ -119,6 +119,12 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
         <Link to="/purchaseproduct" className={`${hoverClass} transition`}>
           Purchase Product
         </Link>
+        <Link to="/about-us" className={`${hoverClass} transition`}>
+          About Us
+        </Link>
+        <Link to="/contact-us" className={`${hoverClass} transition`}>
+          Contact Us
+        </Link>
         {displayName && <span className="text-indigo-300">Welcome, {displayName}</span>}
         <button
           type="button"
@@ -204,3 +210,4 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
 };
 
 export default UserNavbar;
+

@@ -20,13 +20,20 @@ import AdminInventory from "./Pages/admin/AdminInventory";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
+import AboutUsPage from "./Pages/customer/AboutUsPage";
+import ContactUsPage from "./Pages/customer/ContactUsPage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
+import GlobalFooter from "./components/GlobalFooter";
 
 function App() {
   return (
     <BrowserRouter>
+      <div className="min-h-screen flex flex-col">
+        <div className="flex-1">
       <Routes>
-        <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/about-us" element={<AboutUsPage />} />
+          <Route path="/contact-us" element={<ContactUsPage />} />
 
         {/* Auth */}
         <Route path="/login" element={<Login />} />
@@ -109,7 +116,10 @@ function App() {
           }
         />
 
-      </Routes>
+        </Routes>
+        </div>
+        <GlobalFooter />
+      </div>
     </BrowserRouter>
   );
 }

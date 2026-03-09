@@ -127,6 +127,12 @@ const Navbar = () => {
           <NavLink to="/quality-access" className={navItemClass}>
             Quality Access
           </NavLink>
+          <NavLink to="/about-us" className={navItemClass}>
+            About Us
+          </NavLink>
+          <NavLink to="/contact-us" className={navItemClass}>
+            Contact Us
+          </NavLink>
           {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
           <button
             type="button"
