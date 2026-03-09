@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FiBell } from "react-icons/fi";
 import { normalizeRole } from "../../utils/auth";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
@@ -64,9 +65,24 @@ type CartItem = {
 const isNewStock = (createdAt: string) =>
   Date.now() - new Date(createdAt).getTime() < 15 * 60 * 1000;
 
+const parseReminderIds = (rawValue: string | null) => {
+  if (!rawValue) return [];
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+  } catch {
+    return [];
+  }
+};
+
 const PurchaseProduct = () => {
   const navigate = useNavigate();
   const { showConfirm, showMessage, dialogNode } = useCenteredDialog();
+  const currentUserId = localStorage.getItem("userId") || "guest";
+  const reminderStorageKey = `restock_reminders_${currentUserId}`;
   const [selectedTab, setSelectedTab] = useState<"concrete" | "material">("concrete");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -79,10 +95,40 @@ const PurchaseProduct = () => {
   const [productQtyMap, setProductQtyMap] = useState<Record<number, number>>({});
   const [materialQtyMap, setMaterialQtyMap] = useState<Record<number, number>>({});
   const [deletingOrderId, setDeletingOrderId] = useState<number | null>(null);
+  const [restockReminderIds, setRestockReminderIds] = useState<number[]>(() =>
+    parseReminderIds(localStorage.getItem(reminderStorageKey))
+  );
+  const previousProductQtyRef = useRef<Record<number, number>>({});
 
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 1500);
+  };
+
+  const isReminderEnabled = (productId: number) => restockReminderIds.includes(productId);
+
+  const toggleRestockReminder = async (product: ProductStock) => {
+    if (product.availableQuantity > 0) {
+      return;
+    }
+
+    const alreadyEnabled = restockReminderIds.includes(product.id);
+    if (alreadyEnabled) {
+      setRestockReminderIds((prev) => prev.filter((id) => id !== product.id));
+      showToast(`Reminder removed for ${product.name}`);
+      return;
+    }
+
+    setRestockReminderIds((prev) => [...prev, product.id]);
+    showToast(`Reminder set for ${product.name}`);
+
+    if ("Notification" in window && Notification.permission === "default") {
+      try {
+        await Notification.requestPermission();
+      } catch {
+        // Ignore permission errors and continue with in-app reminders.
+      }
+    }
   };
 
   const getStoredCart = () => {
@@ -187,7 +233,41 @@ const PurchaseProduct = () => {
     try {
       const response = await fetch("http://localhost:8080/api/inventory/products");
       const data: ProductStock[] = await response.json();
-      setProducts(Array.isArray(data) ? data : []);
+      const items = Array.isArray(data) ? data : [];
+      setProducts(items);
+
+      if (restockReminderIds.length > 0) {
+        const reminderSet = new Set(restockReminderIds);
+        const restockedIds: number[] = [];
+        const restockedNames: string[] = [];
+
+        items.forEach((product) => {
+          const previousQty = previousProductQtyRef.current[product.id];
+          const becameAvailable = product.availableQuantity > 0 && (previousQty === undefined || previousQty <= 0);
+          if (reminderSet.has(product.id) && becameAvailable) {
+            restockedIds.push(product.id);
+            restockedNames.push(product.name);
+          }
+        });
+
+        if (restockedIds.length > 0) {
+          showToast(`${restockedNames.join(", ")} restocked`);
+          if ("Notification" in window && Notification.permission === "granted") {
+            try {
+              new Notification("RMC ERP Restock Alert", {
+                body: `${restockedNames.join(", ")} is back in stock.`,
+              });
+            } catch {
+              // Continue with in-app toast if browser notification fails.
+            }
+          }
+          setRestockReminderIds((prev) => prev.filter((id) => !restockedIds.includes(id)));
+        }
+      }
+
+      previousProductQtyRef.current = Object.fromEntries(
+        items.map((product) => [product.id, product.availableQuantity])
+      );
     } catch (e) {
       console.error("Unable to load products", e);
     }
@@ -227,6 +307,10 @@ const PurchaseProduct = () => {
   };
 
   useEffect(() => {
+    localStorage.setItem(reminderStorageKey, JSON.stringify(restockReminderIds));
+  }, [reminderStorageKey, restockReminderIds]);
+
+  useEffect(() => {
     const role = normalizeRole(localStorage.getItem("role"));
     const userId = localStorage.getItem("userId");
     if (role !== "CUSTOMER" || !userId) {
@@ -240,6 +324,20 @@ const PurchaseProduct = () => {
     void fetchProducts();
     void fetchMaterials();
   }, []);
+
+  useEffect(() => {
+    if (restockReminderIds.length === 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void fetchProducts();
+    }, 20000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [restockReminderIds]);
 
   const deleteConcreteOrder = async (order: ConcreteOrder) => {
     if (!(await showConfirm(`Delete order ${order.orderId}?`, "Confirm Delete", "Delete"))) return;
@@ -366,6 +464,20 @@ const PurchaseProduct = () => {
                         {p.availableQuantity <= 0 ? "Out of Stock" : "Add to Cart"}
                       </button>
                     </div>
+                    {p.availableQuantity <= 0 && (
+                      <button
+                        type="button"
+                        onClick={() => void toggleRestockReminder(p)}
+                        className={`mt-2 w-full px-4 py-2 rounded-lg border text-sm font-semibold transition inline-flex items-center justify-center gap-2 ${
+                          isReminderEnabled(p.id)
+                            ? "border-amber-300 bg-amber-50 text-amber-700"
+                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <FiBell />
+                        {isReminderEnabled(p.id) ? "Reminder Set" : "Notify Me"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

@@ -108,6 +108,13 @@ const AdminUsers = () => {
           </button>
 
           <button
+            onClick={() => navigate("/admin/maintenance")}
+            className="text-left px-4 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Maintenance
+          </button>
+
+          <button
             onClick={() => {
               localStorage.clear();
               navigate("/login");

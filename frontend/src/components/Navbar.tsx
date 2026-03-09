@@ -26,6 +26,7 @@ const Navbar = () => {
       : null;
 
   const [showProfile, setShowProfile] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [displayName, setDisplayName] = useState(username || "");
   const [profile, setProfile] = useState<UserProfile | null>({
     id: Number(userId || 0),
@@ -102,6 +103,11 @@ const Navbar = () => {
       ? "text-indigo-600 font-semibold border-b-2 border-indigo-600 pb-1"
       : "hover:text-indigo-600 transition";
 
+  const menuItemClass = ({ isActive }: { isActive: boolean }) =>
+    isActive
+      ? "block px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50"
+      : "block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-indigo-600 transition";
+
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between text-sm font-medium text-gray-700">
@@ -112,26 +118,8 @@ const Navbar = () => {
           <NavLink to="/home" className={navItemClass}>
             Home
           </NavLink>
-          <NavLink to="/dashboard" className={navItemClass}>
-            My Orders
-          </NavLink>
           <NavLink to="/purchaseproduct" className={navItemClass}>
             Purchase Product
-          </NavLink>
-          <NavLink to="/delivery-tracking" className={navItemClass}>
-            Delivery Tracking
-          </NavLink>
-          <NavLink to="/billing-payment" className={navItemClass}>
-            Billing & Payment
-          </NavLink>
-          <NavLink to="/quality-access" className={navItemClass}>
-            Quality Access
-          </NavLink>
-          <NavLink to="/about-us" className={navItemClass}>
-            About Us
-          </NavLink>
-          <NavLink to="/contact-us" className={navItemClass}>
-            Contact Us
           </NavLink>
           {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
           <button
@@ -142,15 +130,60 @@ const Navbar = () => {
           >
             &#128100;
           </button>
-          <button
-            onClick={() => {
-              localStorage.clear();
-              navigate("/login");
-            }}
-            className="text-red-500 hover:text-red-400 transition"
-          >
-            Logout
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowMenu((prev) => !prev)}
+              className="text-xl leading-none hover:text-indigo-600 transition"
+              title="Menu"
+              aria-label="Open navigation menu"
+            >
+              &#9776;
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 mt-3 w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-2">
+                <NavLink
+                  to="/dashboard"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  My Orders
+                </NavLink>
+                <NavLink
+                  to="/delivery-tracking"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  Delivery Tracking
+                </NavLink>
+                <NavLink
+                  to="/billing-payment"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  Billing & Payment
+                </NavLink>
+                <NavLink
+                  to="/quality-access"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  Quality Access
+                </NavLink>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMenu(false);
+                    localStorage.clear();
+                    navigate("/login");
+                  }}
+                  className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50 hover:text-red-600 transition"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
