@@ -24,6 +24,7 @@ import AboutUsPage from "./Pages/customer/AboutUsPage";
 import ContactUsPage from "./Pages/customer/ContactUsPage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
 import GlobalFooter from "./components/GlobalFooter";
+import AdminMaintenance from "./Pages/admin/AdminMaintenance";
 
 function App() {
   return (
@@ -115,6 +116,15 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+                  path="/admin/maintenance"
+                  element={
+                    <ProtectedRoute role="ADMIN">
+                      <AdminMaintenance />
+                    </ProtectedRoute>
+                  }
+                />
 
         </Routes>
         </div>
