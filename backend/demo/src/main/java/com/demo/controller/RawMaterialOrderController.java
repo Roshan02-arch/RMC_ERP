@@ -71,7 +71,7 @@ public class RawMaterialOrderController {
             order.setPricePerUnit(material.getPricePerUnit());
             order.setTotalPrice(material.getPricePerUnit() * quantity);
             order.setAddress(address);
-            order.setStatus("PENDING_APPROVAL");
+            order.setStatus("APPROVED");
             order.setCreatedAt(LocalDateTime.now());
 
             RawMaterialOrder saved = rawMaterialOrderRepository.save(order);
@@ -80,7 +80,7 @@ public class RawMaterialOrderController {
             rawMaterialRepository.save(material);
 
             return ResponseEntity.ok(Map.of(
-                    "message", "Raw material order created successfully",
+                    "message", "Raw material order placed successfully",
                     "order", toOrderView(saved)
             ));
         } catch (RuntimeException e) {
@@ -195,6 +195,11 @@ public class RawMaterialOrderController {
     }
 
     private Map<String, Object> toOrderView(RawMaterialOrder o) {
+        String resolvedStatus = Optional.ofNullable(o.getStatus()).orElse("APPROVED");
+        if ("PENDING_APPROVAL".equalsIgnoreCase(resolvedStatus)) {
+            resolvedStatus = "APPROVED";
+        }
+
         Map<String, Object> row = new HashMap<>();
         row.put("id", o.getId());
         row.put("userId", o.getUserId());
@@ -207,7 +212,7 @@ public class RawMaterialOrderController {
         row.put("pricePerUnit", o.getPricePerUnit());
         row.put("totalPrice", o.getTotalPrice());
         row.put("address", Optional.ofNullable(o.getAddress()).orElse(""));
-        row.put("status", Optional.ofNullable(o.getStatus()).orElse("PENDING_APPROVAL"));
+        row.put("status", resolvedStatus);
         row.put("createdAt", o.getCreatedAt());
         return row;
     }

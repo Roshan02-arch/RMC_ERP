@@ -17,6 +17,7 @@ import AdminUsers from "./Pages/admin/AdminUsers";
 import AdminLogins from "./Pages/admin/AdminLogins";
 import AdminSchedule from "./Pages/admin/AdminSchedule";
 import AdminInventory from "./Pages/admin/AdminInventory";
+import AdminMaintenance from "./Pages/admin/AdminMaintenance";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
@@ -105,6 +106,15 @@ function App() {
           element={
             <ProtectedRoute role="ADMIN">
               <AdminInventory />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/maintenance"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminMaintenance />
             </ProtectedRoute>
           }
         />
