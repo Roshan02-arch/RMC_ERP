@@ -21,6 +21,7 @@ import com.demo.repository.DriverRepository;
 import com.demo.repository.OrderAssignmentRepository;
 import com.demo.repository.OrderRepository;
 import com.demo.repository.PaymentRecordRepository;
+import com.demo.repository.QualityInspectionRepository;
 import com.demo.repository.TransitMixerRepository;
 import com.demo.repository.UserRepository;
 
@@ -62,6 +63,9 @@ public class AdminController {
 
     @Autowired
     private PaymentRecordRepository paymentRecordRepository;
+
+    @Autowired
+    private QualityInspectionRepository qualityInspectionRepository;
 
 
     // ? 1. Get All Orders
@@ -208,6 +212,8 @@ public class AdminController {
             if (assignment != null) {
                 orderAssignmentRepository.delete(assignment);
             }
+
+            qualityInspectionRepository.deleteByOrder_Id(internalOrderId);
 
             orderRepository.delete(order);
 
@@ -1062,6 +1068,10 @@ public class AdminController {
         row.put("liveLongitude", order.getLiveLongitude());
         row.put("deliveredAt", order.getDeliveredAt());
         row.put("deliveryConfirmationDetails", order.getDeliveryConfirmationDetails());
+        row.put("userId", order.getUser() != null ? order.getUser().getId() : null);
+        row.put("customerName", order.getUser() != null ? order.getUser().getName() : null);
+        row.put("customerEmail", order.getUser() != null ? order.getUser().getEmail() : null);
+        row.put("customerPhone", order.getUser() != null ? order.getUser().getNumber() : null);
 
         OrderAssignment assignment = orderAssignmentRepository.findByOrder_Id(order.getId()).orElse(null);
         if (assignment != null) {

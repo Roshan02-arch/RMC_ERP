@@ -1,53 +1,86 @@
-package com.demo.dto;
+package com.demo.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
-public class QualityAccessResponse {
+@Entity
+@Table(name = "quality_inspections")
+public class QualityInspection {
 
-    private String orderId;
-    private String grade;
-    private String status;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true, nullable = false)
     private String inspectionNumber;
-    private String mixDesignId;
-    private String approvedMixDesignDetails;
-    private String materialProportions;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    private Order order;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "mix_design_id")
+    private MixDesign mixDesign;
+
+    private String batchCode;
+
     private double slumpTestResultMm;
-    private String slumpRequiredRangeMm;
+    private double slumpMinMm;
+    private double slumpMaxMm;
     private boolean slumpWithinStandard;
+
+    private double requiredStrengthMpa;
     private double cubeStrength7DayMpa;
     private double cubeStrength14DayMpa;
     private double cubeStrength28DayMpa;
-    private double requiredStrengthMpa;
     private boolean cube7DayWithinStandard;
     private boolean cube14DayWithinStandard;
     private boolean cube28DayWithinStandard;
+
     private boolean qualityCertificateGenerated;
     private String qualityCertificateNumber;
     private LocalDateTime qualityCertificateGeneratedAt;
+
     private String qualityRemarks;
+    private boolean compliancePassed;
 
-    public String getOrderId() {
-        return orderId;
+    private Long recordedByAdminId;
+    private LocalDateTime recordedAt;
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    public void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        recordedAt = now;
+        updatedAt = now;
+        if (inspectionNumber == null || inspectionNumber.isBlank()) {
+            inspectionNumber = "QIN-" + UUID.randomUUID().toString().substring(0, 10).toUpperCase();
+        }
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
+    @PreUpdate
+    public void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 
-    public String getGrade() {
-        return grade;
+    public Long getId() {
+        return id;
     }
 
-    public void setGrade(String grade) {
-        this.grade = grade;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getInspectionNumber() {
@@ -58,28 +91,28 @@ public class QualityAccessResponse {
         this.inspectionNumber = inspectionNumber;
     }
 
-    public String getMixDesignId() {
-        return mixDesignId;
+    public Order getOrder() {
+        return order;
     }
 
-    public void setMixDesignId(String mixDesignId) {
-        this.mixDesignId = mixDesignId;
+    public void setOrder(Order order) {
+        this.order = order;
     }
 
-    public String getApprovedMixDesignDetails() {
-        return approvedMixDesignDetails;
+    public MixDesign getMixDesign() {
+        return mixDesign;
     }
 
-    public void setApprovedMixDesignDetails(String approvedMixDesignDetails) {
-        this.approvedMixDesignDetails = approvedMixDesignDetails;
+    public void setMixDesign(MixDesign mixDesign) {
+        this.mixDesign = mixDesign;
     }
 
-    public String getMaterialProportions() {
-        return materialProportions;
+    public String getBatchCode() {
+        return batchCode;
     }
 
-    public void setMaterialProportions(String materialProportions) {
-        this.materialProportions = materialProportions;
+    public void setBatchCode(String batchCode) {
+        this.batchCode = batchCode;
     }
 
     public double getSlumpTestResultMm() {
@@ -90,12 +123,20 @@ public class QualityAccessResponse {
         this.slumpTestResultMm = slumpTestResultMm;
     }
 
-    public String getSlumpRequiredRangeMm() {
-        return slumpRequiredRangeMm;
+    public double getSlumpMinMm() {
+        return slumpMinMm;
     }
 
-    public void setSlumpRequiredRangeMm(String slumpRequiredRangeMm) {
-        this.slumpRequiredRangeMm = slumpRequiredRangeMm;
+    public void setSlumpMinMm(double slumpMinMm) {
+        this.slumpMinMm = slumpMinMm;
+    }
+
+    public double getSlumpMaxMm() {
+        return slumpMaxMm;
+    }
+
+    public void setSlumpMaxMm(double slumpMaxMm) {
+        this.slumpMaxMm = slumpMaxMm;
     }
 
     public boolean isSlumpWithinStandard() {
@@ -104,6 +145,14 @@ public class QualityAccessResponse {
 
     public void setSlumpWithinStandard(boolean slumpWithinStandard) {
         this.slumpWithinStandard = slumpWithinStandard;
+    }
+
+    public double getRequiredStrengthMpa() {
+        return requiredStrengthMpa;
+    }
+
+    public void setRequiredStrengthMpa(double requiredStrengthMpa) {
+        this.requiredStrengthMpa = requiredStrengthMpa;
     }
 
     public double getCubeStrength7DayMpa() {
@@ -128,14 +177,6 @@ public class QualityAccessResponse {
 
     public void setCubeStrength28DayMpa(double cubeStrength28DayMpa) {
         this.cubeStrength28DayMpa = cubeStrength28DayMpa;
-    }
-
-    public double getRequiredStrengthMpa() {
-        return requiredStrengthMpa;
-    }
-
-    public void setRequiredStrengthMpa(double requiredStrengthMpa) {
-        this.requiredStrengthMpa = requiredStrengthMpa;
     }
 
     public boolean isCube7DayWithinStandard() {
@@ -192,5 +233,37 @@ public class QualityAccessResponse {
 
     public void setQualityRemarks(String qualityRemarks) {
         this.qualityRemarks = qualityRemarks;
+    }
+
+    public boolean isCompliancePassed() {
+        return compliancePassed;
+    }
+
+    public void setCompliancePassed(boolean compliancePassed) {
+        this.compliancePassed = compliancePassed;
+    }
+
+    public Long getRecordedByAdminId() {
+        return recordedByAdminId;
+    }
+
+    public void setRecordedByAdminId(Long recordedByAdminId) {
+        this.recordedByAdminId = recordedByAdminId;
+    }
+
+    public LocalDateTime getRecordedAt() {
+        return recordedAt;
+    }
+
+    public void setRecordedAt(LocalDateTime recordedAt) {
+        this.recordedAt = recordedAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

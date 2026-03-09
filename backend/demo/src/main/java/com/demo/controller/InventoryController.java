@@ -300,13 +300,16 @@ public class InventoryController {
                 if (material.getPricePerUnit() <= 0) {
                     material.setPricePerUnit((Double) row.get("price"));
                 }
+                if (material.getQuantity() <= 0) {
+                    material.setQuantity(10);
+                }
                 material.setUpdatedAt(LocalDateTime.now());
                 rawMaterialRepository.save(material);
                 continue;
             }
             RawMaterial material = new RawMaterial();
             material.setName(name);
-            material.setQuantity(0);
+            material.setQuantity(10);
             material.setReorderLevel((Double) row.get("reorder"));
             material.setSupplier(String.valueOf(row.get("supplier")));
             material.setUnit(String.valueOf(row.get("unit")));

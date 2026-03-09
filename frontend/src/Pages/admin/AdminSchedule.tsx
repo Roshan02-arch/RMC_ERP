@@ -152,7 +152,15 @@ const AdminSchedule = () => {
       const data = await res.json();
       const items = Array.isArray(data) ? data : [];
       setOrders(items);
-      if (!selectedOrderId && items.length > 0) {
+      if (items.length === 0) {
+        setSelectedOrderId("");
+        return;
+      }
+      if (!selectedOrderId) {
+        setSelectedOrderId(items[0].orderId);
+        return;
+      }
+      if (!items.some((order: Order) => order.orderId === selectedOrderId)) {
         setSelectedOrderId(items[0].orderId);
       }
     } catch (error) {
@@ -204,6 +212,8 @@ const AdminSchedule = () => {
     }
     await showMessage(message || "Updated successfully");
     await fetchOrders();
+    await fetchTripRecords();
+    await fetchMonitoring();
     return true;
   };
 
@@ -500,6 +510,19 @@ const AdminSchedule = () => {
           <button onClick={() => navigate("/admin/adminlogins")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Admin Logins</button>
           <button onClick={() => navigate("/admin/schedule")} className="text-left px-3 py-2 rounded-lg bg-slate-800">Schedule</button>
           <button onClick={() => navigate("/admin/inventory")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Inventory</button>
+
+          <button
+            onClick={() => navigate("/admin/finance")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Finance
+          </button>
+          <button
+            onClick={() => navigate("/admin/quality-control")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Quality Control
+          </button>
           <button
             onClick={() => {
               localStorage.clear();
@@ -874,3 +897,5 @@ const AdminSchedule = () => {
 };
 
 export default AdminSchedule;
+
+

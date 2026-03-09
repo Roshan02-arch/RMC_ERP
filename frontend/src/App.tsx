@@ -17,6 +17,8 @@ import AdminUsers from "./Pages/admin/AdminUsers";
 import AdminLogins from "./Pages/admin/AdminLogins";
 import AdminSchedule from "./Pages/admin/AdminSchedule";
 import AdminInventory from "./Pages/admin/AdminInventory";
+import AdminFinance from "./Pages/admin/AdminFinance";
+import AdminQualityControl from "./Pages/admin/AdminQualityControl";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
@@ -105,6 +107,24 @@ function App() {
           element={
             <ProtectedRoute role="ADMIN">
               <AdminInventory />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/finance"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminFinance />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/quality-control"
+          element={
+            <ProtectedRoute role="ADMIN">
+              <AdminQualityControl />
             </ProtectedRoute>
           }
         />

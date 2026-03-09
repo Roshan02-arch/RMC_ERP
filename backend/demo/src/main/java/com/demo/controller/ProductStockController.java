@@ -159,9 +159,12 @@ public class ProductStockController {
                 ConcreteProductStock product = existing.get();
                 if (product.getImageUrl() == null || product.getImageUrl().isBlank()) {
                     product.setImageUrl(String.valueOf(row.get("imageUrl")));
-                    product.setUpdatedAt(LocalDateTime.now());
-                    productRepository.save(product);
                 }
+                if (product.getAvailableQuantity() <= 0) {
+                    product.setAvailableQuantity(10);
+                }
+                product.setUpdatedAt(LocalDateTime.now());
+                productRepository.save(product);
                 continue;
             }
 

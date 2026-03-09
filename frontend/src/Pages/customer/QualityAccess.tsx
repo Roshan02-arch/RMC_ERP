@@ -15,6 +15,7 @@ type QualityRow = {
   slumpRequiredRangeMm: string;
   slumpWithinStandard: boolean;
   cubeStrength7DayMpa: number;
+  cubeStrength14DayMpa?: number;
   cubeStrength28DayMpa: number;
   requiredStrengthMpa: number;
   cube7DayWithinStandard: boolean;
@@ -217,6 +218,20 @@ const QualityAccess = () => {
           )}
         </section>
 
+        <section className="bg-white rounded-2xl shadow-md border border-slate-100 p-6">
+          <h2 className="text-base font-semibold text-slate-800">How To Read This Report</h2>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
+            <p><span className="font-semibold">Slump Test:</span> checks concrete flow (not too dry, not too watery).</p>
+            <p><span className="font-semibold">Cube 7-Day:</span> early strength progress check.</p>
+            <p><span className="font-semibold">Cube 14-Day:</span> middle-stage strength growth check.</p>
+            <p><span className="font-semibold">Cube 28-Day:</span> final main strength check for compliance.</p>
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            Status guide: <span className="font-semibold">Within Standard / Meets Standard</span> means quality is okay.
+            <span className="font-semibold"> Out of Standard / Below Standard</span> means deviation found.
+          </p>
+        </section>
+
         {selected && (
           <>
             <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -279,6 +294,7 @@ const QualityAccess = () => {
                   <div className="rounded-xl border border-slate-200 p-4 bg-slate-50">
                     <p className="font-semibold text-slate-800 mb-2">Cube Strength Report</p>
                     <p className="text-sm text-slate-700">7-Day: {selected.cubeStrength7DayMpa} MPa</p>
+                    <p className="text-sm text-slate-700">14-Day: {selected.cubeStrength14DayMpa ?? "-"} MPa</p>
                     <p className="text-sm text-slate-700">28-Day: {selected.cubeStrength28DayMpa} MPa</p>
                     <p className="text-sm text-slate-700">Required: {selected.requiredStrengthMpa} MPa</p>
                     <p className={`mt-2 inline-block px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(selected.cube28DayWithinStandard)}`}>

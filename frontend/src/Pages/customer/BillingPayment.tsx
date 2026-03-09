@@ -47,6 +47,7 @@ const GST_RATE = 18;
 const formatCurrency = (value: number) =>
   `Rs.${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const isCodPayment = (method: string) => method.trim().toUpperCase().startsWith("CASH_ON_DELIVERY");
+const isDeliveredOrder = (status: string) => String(status || "").trim().toUpperCase() === "DELIVERED";
 
 const BillingPayment = () => {
   const navigate = useNavigate();
@@ -157,16 +158,28 @@ const BillingPayment = () => {
     () => paymentHistory.filter((p) => p.orderId === selectedOrderId),
     [paymentHistory, selectedOrderId]
   );
-  const effectivePaidPayments = selectedOrderPayments.filter((p) => !isCodPayment(p.method));
-  const totalPaid = effectivePaidPayments.reduce((sum, p) => sum + p.amount, 0);
-  const outstanding = Math.max(0, totalPayable - totalPaid);
+  const hasCodPayment = selectedOrderPayments.some((p) => isCodPayment(p.method));
+  const hasOnlinePaidPayment = selectedOrderPayments.some((p) => !isCodPayment(p.method));
+  const paymentTarget = subtotal;
+  const codDelivered = Boolean(selectedOrder && isDeliveredOrder(selectedOrder.status));
+  const totalPaid = hasOnlinePaidPayment ? paymentTarget : codDelivered ? paymentTarget : 0;
+  const outstanding = Math.max(0, paymentTarget - totalPaid);
   const paymentStatus = isRawInvoice
     ? "PENDING"
-    : outstanding === 0
-    ? "PAID"
-    : totalPaid > 0
-    ? "PARTIALLY_PAID"
+    : hasOnlinePaidPayment
+    ? "COMPLETED_SUCCESSFULLY"
+    : hasCodPayment && codDelivered
+    ? "COMPLETED_SUCCESSFULLY"
+    : hasCodPayment
+    ? "PENDING"
+    : codDelivered
+    ? "COMPLETED_SUCCESSFULLY"
     : "PENDING";
+  const paymentMethodLabel = hasOnlinePaidPayment
+    ? "UPI / BANK TRANSFER"
+    : hasCodPayment || !selectedOrderPayments.length
+    ? "CASH ON DELIVERY"
+    : "CASH ON DELIVERY";
 
   useEffect(() => {
     const fetchPayments = async () => {
@@ -344,6 +357,7 @@ const BillingPayment = () => {
                 <p className="text-sm"><strong>Email:</strong> {customerEmail}</p>
                 <p className="text-sm"><strong>Phone:</strong> {customerPhone}</p>
                 <p className="text-sm"><strong>Address:</strong> {selectedRawOrder?.address || customerAddress}</p>
+                <p className="text-sm mt-2"><strong>Payment Method:</strong> {paymentMethodLabel}</p>
                 <p className="text-sm mt-2"><strong>Payment Status:</strong> {paymentStatus.replaceAll("_", " ")}</p>
               </div>
             </section>

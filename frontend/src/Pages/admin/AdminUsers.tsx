@@ -108,6 +108,20 @@ const AdminUsers = () => {
           </button>
 
           <button
+            onClick={() => navigate("/admin/finance")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Finance
+          </button>
+
+          <button
+            onClick={() => navigate("/admin/quality-control")}
+            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Quality Control
+          </button>
+
+          <button
             onClick={() => {
               localStorage.clear();
               navigate("/login");
@@ -178,3 +192,5 @@ const AdminUsers = () => {
 };
 
 export default AdminUsers;
+
+
