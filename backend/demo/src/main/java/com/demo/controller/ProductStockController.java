@@ -91,6 +91,58 @@ public class ProductStockController {
         }
     }
 
+    @PutMapping("/api/admin/inventory/products/{id}")
+    public ResponseEntity<?> updateProduct(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return performUpdateProduct(id, payload);
+    }
+
+    // Compatibility endpoint in case PUT is blocked by proxy/browser setup.
+    @PostMapping("/api/admin/inventory/products/{id}/update")
+    public ResponseEntity<?> updateProductViaPost(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        return performUpdateProduct(id, payload);
+    }
+
+    private ResponseEntity<?> performUpdateProduct(Long id, Map<String, Object> payload) {
+        try {
+            ConcreteProductStock product = productRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Product not found"));
+
+            String name = String.valueOf(payload.getOrDefault("name", product.getName())).trim();
+            double price = Double.parseDouble(String.valueOf(payload.getOrDefault("pricePerUnit", product.getPricePerUnit())));
+            double stock = Double.parseDouble(String.valueOf(payload.getOrDefault("availableQuantity", product.getAvailableQuantity())));
+            String unit = String.valueOf(payload.getOrDefault("unit", product.getUnit())).trim();
+            String imageUrl = String.valueOf(payload.getOrDefault("imageUrl", product.getImageUrl() == null ? "" : product.getImageUrl())).trim();
+
+            if (name.isEmpty() || price <= 0 || stock < 0 || unit.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Invalid product details"));
+            }
+
+            Optional<ConcreteProductStock> duplicate = productRepository.findByNameIgnoreCase(name);
+            if (duplicate.isPresent() && !duplicate.get().getId().equals(product.getId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Product name already exists"));
+            }
+
+            product.setName(name);
+            product.setPricePerUnit(price);
+            product.setAvailableQuantity(stock);
+            product.setUnit(unit);
+            if (!imageUrl.isEmpty()) {
+                product.setImageUrl(imageUrl);
+            }
+            product.setUpdatedAt(LocalDateTime.now());
+            productRepository.save(product);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "Product updated successfully",
+                    "product", toView(product)
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Unable to update product"));
+        }
+    }
+
     @DeleteMapping({"/api/admin/inventory/products/{id}", "/api/inventory/products/{id}"})
     public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
         return performDeleteProduct(id);

@@ -10,11 +10,35 @@ interface Order {
   status: string;
 }
 
+interface RawMaterialOrder {
+  id: number;
+  materialName: string;
+  quantity: number;
+  unit: string;
+  totalPrice: number;
+  status: string;
+}
+
+type AdminOrderRow = {
+  key: string;
+  orderId: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  totalPrice: number;
+  status: string;
+  orderType: "CONCRETE" | "RAW_MATERIAL";
+  rawOrderId?: number;
+};
+
+const normalizeRawMaterialStatus = (status: string) =>
+  (status || "").trim().toUpperCase() === "PENDING_APPROVAL" ? "APPROVED" : status;
+
 const AdminOrders = () => {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(null);
+  const [confirmOrder, setConfirmOrder] = useState<AdminOrderRow | null>(null);
   const [showMessageBox, setShowMessageBox] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -26,9 +50,43 @@ const AdminOrders = () => {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/admin/orders");
-      const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+      const [concreteRes, rawRes] = await Promise.all([
+        fetch("http://localhost:8080/api/admin/orders"),
+        fetch("http://localhost:8080/api/admin/inventory/raw-material-orders"),
+      ]);
+      const [concreteData, rawData] = await Promise.all([
+        concreteRes.json(),
+        rawRes.json(),
+      ]);
+
+      const concreteOrders: AdminOrderRow[] = (Array.isArray(concreteData) ? concreteData : []).map(
+        (order: Order) => ({
+          key: `concrete-${order.orderId}`,
+          orderId: order.orderId,
+          itemName: order.grade,
+          quantity: Number(order.quantity || 0),
+          unit: "m3",
+          totalPrice: Number(order.totalPrice || 0),
+          status: order.status || "",
+          orderType: "CONCRETE",
+        })
+      );
+
+      const rawOrders: AdminOrderRow[] = (Array.isArray(rawData) ? rawData : []).map(
+        (order: RawMaterialOrder) => ({
+          key: `raw-${order.id}`,
+          orderId: `RMO-${order.id}`,
+          itemName: order.materialName,
+          quantity: Number(order.quantity || 0),
+          unit: order.unit || "",
+          totalPrice: Number(order.totalPrice || 0),
+          status: normalizeRawMaterialStatus(order.status || ""),
+          orderType: "RAW_MATERIAL",
+          rawOrderId: order.id,
+        })
+      );
+
+      setOrders([...concreteOrders, ...rawOrders]);
     } catch (error) {
       console.error("Error fetching orders:", error);
     }
@@ -41,22 +99,7 @@ const AdminOrders = () => {
       return;
     }
 
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch("http://localhost:8080/api/admin/orders");
-        const data = await res.json();
-        if (mounted) {
-          setOrders(Array.isArray(data) ? data : []);
-        }
-      } catch (error) {
-        console.error("Error fetching orders:", error);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
+    void fetchOrders();
   }, [navigate]);
 
   const filteredOrders = orders.filter((order) => {
@@ -66,19 +109,25 @@ const AdminOrders = () => {
     }
     return (
       (order.orderId || "").toLowerCase().includes(query) ||
-      (order.grade || "").toLowerCase().includes(query) ||
+      (order.itemName || "").toLowerCase().includes(query) ||
       String(order.quantity ?? "").toLowerCase().includes(query) ||
       String(order.totalPrice ?? "").toLowerCase().includes(query) ||
-      (order.status || "").toLowerCase().includes(query)
+      (order.status || "").toLowerCase().includes(query) ||
+      order.orderType.toLowerCase().includes(query)
     );
   });
 
-  const deleteOrder = async (orderId: string) => {
+  const deleteOrder = async (order: AdminOrderRow) => {
     try {
       setIsDeleting(true);
-      const res = await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(orderId)}`, {
-        method: "DELETE",
-      });
+      const res =
+        order.orderType === "RAW_MATERIAL" && order.rawOrderId
+          ? await fetch(`http://localhost:8080/api/inventory/raw-material-orders/${order.rawOrderId}`, {
+              method: "DELETE",
+            })
+          : await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(order.orderId)}`, {
+              method: "DELETE",
+            });
 
       if (!res.ok) {
         const raw = await res.text();
@@ -159,17 +208,10 @@ const AdminOrders = () => {
           </button>
 
           <button
-            onClick={() => navigate("/admin/finance")}
+            onClick={() => navigate("/admin/maintenance")}
             className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
           >
-            Finance
-          </button>
-
-          <button
-            onClick={() => navigate("/admin/quality-control")}
-            className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition"
-          >
-            Quality Control
+            Maintenance
           </button>
 
           <button
@@ -202,7 +244,7 @@ const AdminOrders = () => {
               <thead>
                 <tr className="bg-gray-50 text-gray-600 uppercase text-xs tracking-wider">
                   <th className="px-6 py-4 text-left">Order ID</th>
-                  <th className="px-6 py-4 text-left">Grade</th>
+                  <th className="px-6 py-4 text-left">Item</th>
                   <th className="px-6 py-4 text-left">Quantity</th>
                   <th className="px-6 py-4 text-left">Total</th>
                   <th className="px-6 py-4 text-left">Status</th>
@@ -212,10 +254,15 @@ const AdminOrders = () => {
 
               <tbody className="divide-y divide-gray-200">
                 {filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50 transition">
+                  <tr key={order.key} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4 font-medium text-gray-800">{order.orderId}</td>
-                    <td className="px-6 py-4">{order.grade}</td>
-                    <td className="px-6 py-4">{order.quantity} m3</td>
+                    <td className="px-6 py-4">
+                      {order.itemName}
+                      <span className="ml-2 text-[11px] font-semibold text-gray-500">
+                        ({order.orderType === "RAW_MATERIAL" ? "Raw Material" : "Concrete"})
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">{order.quantity} {order.unit}</td>
                     <td className="px-6 py-4 font-semibold text-gray-700">Rs.{order.totalPrice}</td>
 
                     <td className="px-6 py-4">
@@ -237,7 +284,7 @@ const AdminOrders = () => {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setConfirmOrderId(order.orderId)}
+                          onClick={() => setConfirmOrder(order)}
                           disabled={isDeleting}
                           className="px-4 py-1 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white rounded-md transition"
                         >
@@ -260,7 +307,7 @@ const AdminOrders = () => {
         </div>
       </main>
 
-      {confirmOrderId && (
+      {confirmOrder && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
             <h3 className="text-lg font-semibold text-gray-800">Confirm Delete</h3>
@@ -268,7 +315,7 @@ const AdminOrders = () => {
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setConfirmOrderId(null)}
+                onClick={() => setConfirmOrder(null)}
                 className="px-4 py-2 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-800"
               >
                 Cancel
@@ -276,10 +323,10 @@ const AdminOrders = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const orderId = confirmOrderId;
-                  setConfirmOrderId(null);
-                  if (orderId) {
-                    void deleteOrder(orderId);
+                  const targetOrder = confirmOrder;
+                  setConfirmOrder(null);
+                  if (targetOrder) {
+                    void deleteOrder(targetOrder);
                   }
                 }}
                 className="px-4 py-2 text-sm rounded-md bg-red-600 hover:bg-red-500 text-white"
@@ -313,5 +360,3 @@ const AdminOrders = () => {
 };
 
 export default AdminOrders;
-
-

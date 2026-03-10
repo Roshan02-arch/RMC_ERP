@@ -24,6 +24,15 @@ type PaymentRecord = {
   transactionId: string;
 };
 
+type PaymentStatus = "PENDING" | "PARTIALLY_PAID" | "PAYMENT_COMPLETED";
+
+type ConcretePaymentSummary = {
+  totalPaid: number;
+  outstanding: number;
+  totalPayable: number;
+  status: PaymentStatus;
+};
+
 type RawMaterialOrder = {
   id: number;
   materialName: string;
@@ -47,7 +56,42 @@ const GST_RATE = 18;
 const formatCurrency = (value: number) =>
   `Rs.${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const isCodPayment = (method: string) => method.trim().toUpperCase().startsWith("CASH_ON_DELIVERY");
-const isDeliveredOrder = (status: string) => String(status || "").trim().toUpperCase() === "DELIVERED";
+const normalizeStatus = (value: string) => value.trim().toUpperCase();
+const isRawPaymentCompleted = (status: string) => {
+  const normalized = normalizeStatus(status || "");
+  return (
+    normalized === "PAID" ||
+    normalized === "PAYMENT_COMPLETED" ||
+    normalized === "COMPLETED" ||
+    normalized === "FULLY_PAID"
+  );
+};
+
+const getConcreteSubtotal = (order: Order) => {
+  const ratePerCubicMeter = RATE_MAP[order.grade] || 0;
+  if (order.totalPrice && order.totalPrice > 0) {
+    return order.totalPrice;
+  }
+  return ratePerCubicMeter * order.quantity;
+};
+
+const getConcretePaymentSummary = (order: Order, payments: PaymentRecord[]): ConcretePaymentSummary => {
+  const subtotal = getConcreteSubtotal(order);
+  const gstAmount = (subtotal * GST_RATE) / 100;
+  const totalPayable = subtotal + gstAmount;
+  const totalPaid = payments
+    .filter((p) => !isCodPayment(p.method))
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  const fullyPaid = totalPaid >= totalPayable || totalPaid >= subtotal;
+  const outstanding = fullyPaid ? 0 : Math.max(0, totalPayable - totalPaid);
+  const status: PaymentStatus = fullyPaid
+    ? "PAYMENT_COMPLETED"
+    : totalPaid > 0
+    ? "PARTIALLY_PAID"
+    : "PENDING";
+
+  return { totalPaid, outstanding, totalPayable, status };
+};
 
 const BillingPayment = () => {
   const navigate = useNavigate();
@@ -63,7 +107,8 @@ const BillingPayment = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [rawOrders, setRawOrders] = useState<RawMaterialOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
-  const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
+  const [paymentHistoryByOrderId, setPaymentHistoryByOrderId] = useState<Record<string, PaymentRecord[]>>({});
+  const [loadingPayments, setLoadingPayments] = useState(false);
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [message, setMessage] = useState(navState?.successMessage || "");
@@ -105,20 +150,6 @@ const BillingPayment = () => {
 
         setOrders(concreteItems);
         setRawOrders(rawItems);
-
-        if (lockedOrderId && concreteItems.length > 0) {
-          setSelectedOrderId(concreteItems[0].orderId);
-          return;
-        }
-        if (lockedRawOrderId > 0 && rawItems.length > 0) {
-          setSelectedOrderId(`RAW:${rawItems[0].id}`);
-          return;
-        }
-        if (concreteItems.length > 0) {
-          setSelectedOrderId(concreteItems[0].orderId);
-        } else if (rawItems.length > 0) {
-          setSelectedOrderId(`RAW:${rawItems[0].id}`);
-        }
       } catch (error) {
         console.error("Failed to load billing data", error);
       } finally {
@@ -128,6 +159,39 @@ const BillingPayment = () => {
 
     void load();
   }, [navigate, lockedOrderId, lockedRawOrderId]);
+
+  useEffect(() => {
+    const fetchAllOrderPayments = async () => {
+      if (orders.length === 0) {
+        setPaymentHistoryByOrderId({});
+        return;
+      }
+
+      try {
+        setLoadingPayments(true);
+        const entries = await Promise.all(
+          orders.map(async (order) => {
+            try {
+              const response = await fetch(`http://localhost:8080/api/orders/${order.orderId}/payments`);
+              if (!response.ok) {
+                return [order.orderId, []] as const;
+              }
+              const data: PaymentRecord[] = await response.json();
+              return [order.orderId, Array.isArray(data) ? data : []] as const;
+            } catch {
+              return [order.orderId, []] as const;
+            }
+          })
+        );
+
+        setPaymentHistoryByOrderId(Object.fromEntries(entries));
+      } finally {
+        setLoadingPayments(false);
+      }
+    };
+
+    void fetchAllOrderPayments();
+  }, [orders]);
 
   const selectedOrder = useMemo(
     () => orders.find((o) => o.orderId === selectedOrderId) || null,
@@ -141,6 +205,86 @@ const BillingPayment = () => {
   const isRawInvoice = Boolean(selectedRawOrder);
   const rawRatePerUnit = selectedRawOrder ? Number(selectedRawOrder.pricePerUnit || 0) : 0;
 
+  const concreteSummaryByOrderId = useMemo(
+    () =>
+      Object.fromEntries(
+        orders.map((order) => [
+          order.orderId,
+          getConcretePaymentSummary(order, paymentHistoryByOrderId[order.orderId] || []),
+        ])
+      ) as Record<string, ConcretePaymentSummary>,
+    [orders, paymentHistoryByOrderId]
+  );
+
+  const pendingConcreteOrders = useMemo(
+    () =>
+      orders.filter(
+        (order) => concreteSummaryByOrderId[order.orderId]?.status !== "PAYMENT_COMPLETED"
+      ),
+    [orders, concreteSummaryByOrderId]
+  );
+  const completedConcreteOrders = useMemo(
+    () =>
+      orders.filter(
+        (order) => concreteSummaryByOrderId[order.orderId]?.status === "PAYMENT_COMPLETED"
+      ),
+    [orders, concreteSummaryByOrderId]
+  );
+
+  const pendingRawOrders = useMemo(
+    () => rawOrders.filter((order) => !isRawPaymentCompleted(order.status)),
+    [rawOrders]
+  );
+  const completedRawOrders = useMemo(
+    () => rawOrders.filter((order) => isRawPaymentCompleted(order.status)),
+    [rawOrders]
+  );
+  const hasLockedPendingSelection =
+    (Boolean(lockedOrderId) &&
+      pendingConcreteOrders.some((order) => order.orderId === lockedOrderId)) ||
+    (lockedRawOrderId > 0 && pendingRawOrders.some((order) => order.id === lockedRawOrderId));
+
+  useEffect(() => {
+    const preferredLockedSelection =
+      lockedOrderId && pendingConcreteOrders.some((order) => order.orderId === lockedOrderId)
+        ? lockedOrderId
+        : lockedRawOrderId > 0 &&
+          pendingRawOrders.some((order) => order.id === lockedRawOrderId)
+        ? `RAW:${lockedRawOrderId}`
+        : "";
+
+    const isCurrentValid =
+      pendingConcreteOrders.some((order) => order.orderId === selectedOrderId) ||
+      pendingRawOrders.some((order) => `RAW:${order.id}` === selectedOrderId);
+
+    if (preferredLockedSelection) {
+      if (selectedOrderId !== preferredLockedSelection) {
+        setSelectedOrderId(preferredLockedSelection);
+      }
+      return;
+    }
+
+    if (isCurrentValid) {
+      return;
+    }
+
+    if (pendingConcreteOrders.length > 0) {
+      setSelectedOrderId(pendingConcreteOrders[0].orderId);
+      return;
+    }
+    if (pendingRawOrders.length > 0) {
+      setSelectedOrderId(`RAW:${pendingRawOrders[0].id}`);
+      return;
+    }
+    setSelectedOrderId("");
+  }, [
+    lockedOrderId,
+    lockedRawOrderId,
+    pendingConcreteOrders,
+    pendingRawOrders,
+    selectedOrderId,
+  ]);
+
   const ratePerCubicMeter = selectedOrder ? RATE_MAP[selectedOrder.grade] || 0 : 0;
   const subtotal = selectedOrder
     ? selectedOrder.totalPrice && selectedOrder.totalPrice > 0
@@ -153,57 +297,54 @@ const BillingPayment = () => {
     : 0;
   const gstAmount = (subtotal * GST_RATE) / 100;
   const totalPayable = subtotal + gstAmount;
-
-  const selectedOrderPayments = useMemo(
-    () => paymentHistory.filter((p) => p.orderId === selectedOrderId),
-    [paymentHistory, selectedOrderId]
-  );
-  const hasCodPayment = selectedOrderPayments.some((p) => isCodPayment(p.method));
-  const hasOnlinePaidPayment = selectedOrderPayments.some((p) => !isCodPayment(p.method));
-  const paymentTarget = subtotal;
-  const codDelivered = Boolean(selectedOrder && isDeliveredOrder(selectedOrder.status));
-  const totalPaid = hasOnlinePaidPayment ? paymentTarget : codDelivered ? paymentTarget : 0;
-  const outstanding = Math.max(0, paymentTarget - totalPaid);
-  const paymentStatus = isRawInvoice
-    ? "PENDING"
-    : hasOnlinePaidPayment
-    ? "COMPLETED_SUCCESSFULLY"
-    : hasCodPayment && codDelivered
-    ? "COMPLETED_SUCCESSFULLY"
-    : hasCodPayment
-    ? "PENDING"
-    : codDelivered
-    ? "COMPLETED_SUCCESSFULLY"
+  const selectedConcreteSummary = selectedOrder
+    ? concreteSummaryByOrderId[selectedOrder.orderId] || getConcretePaymentSummary(selectedOrder, [])
+    : null;
+  const totalPaid = selectedConcreteSummary?.totalPaid || 0;
+  const outstanding = selectedConcreteSummary?.outstanding || Math.max(0, totalPayable);
+  const paymentStatus: PaymentStatus = selectedOrder
+    ? selectedConcreteSummary?.status || "PENDING"
+    : selectedRawOrder && isRawPaymentCompleted(selectedRawOrder.status)
+    ? "PAYMENT_COMPLETED"
     : "PENDING";
-  const paymentMethodLabel = hasOnlinePaidPayment
-    ? "UPI / BANK TRANSFER"
-    : hasCodPayment || !selectedOrderPayments.length
-    ? "CASH ON DELIVERY"
-    : "CASH ON DELIVERY";
 
-  useEffect(() => {
-    const fetchPayments = async () => {
-      if (!selectedOrderId || selectedOrderId.startsWith("RAW:")) {
-        setPaymentHistory([]);
-        return;
-      }
-      try {
-        const response = await fetch(`http://localhost:8080/api/orders/${selectedOrderId}/payments`);
-        if (!response.ok) {
-          setPaymentHistory([]);
-          return;
-        }
-        const data: PaymentRecord[] = await response.json();
-        setPaymentHistory(Array.isArray(data) ? data : []);
-      } catch {
-        setPaymentHistory([]);
-      }
-    };
-    void fetchPayments();
-  }, [selectedOrderId]);
+  const downloadInvoicePdf = ({
+    concreteOrder,
+    rawOrder,
+    paymentStatusOverride,
+  }: {
+    concreteOrder?: Order | null;
+    rawOrder?: RawMaterialOrder | null;
+    paymentStatusOverride?: PaymentStatus;
+  }) => {
+    const targetOrder = concreteOrder || selectedOrder;
+    const targetRawOrder = rawOrder || selectedRawOrder;
+    if (!targetOrder && !targetRawOrder) return;
 
-  const handleDownloadPdf = () => {
-    if (!selectedOrder && !selectedRawOrder) return;
+    const targetRatePerUnit = targetOrder
+      ? RATE_MAP[targetOrder.grade] || 0
+      : Number(targetRawOrder?.pricePerUnit || 0);
+    const targetSubtotal = targetOrder
+      ? getConcreteSubtotal(targetOrder)
+      : targetRawOrder
+      ? targetRawOrder.totalPrice && targetRawOrder.totalPrice > 0
+        ? targetRawOrder.totalPrice
+        : targetRatePerUnit * targetRawOrder.quantity
+      : 0;
+    const targetGstAmount = (targetSubtotal * GST_RATE) / 100;
+    const targetTotalPayable = targetSubtotal + targetGstAmount;
+    const targetConcreteSummary = targetOrder
+      ? concreteSummaryByOrderId[targetOrder.orderId] ||
+        getConcretePaymentSummary(targetOrder, paymentHistoryByOrderId[targetOrder.orderId] || [])
+      : null;
+    const targetPaymentStatus: PaymentStatus = paymentStatusOverride
+      ? paymentStatusOverride
+      : targetOrder
+      ? targetConcreteSummary?.status || "PENDING"
+      : targetRawOrder && isRawPaymentCompleted(targetRawOrder.status)
+      ? "PAYMENT_COMPLETED"
+      : "PENDING";
+
     try {
       setDownloadingPdf(true);
       const pdf = new jsPDF("p", "mm", "a4");
@@ -216,7 +357,7 @@ const BillingPayment = () => {
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(11);
-      const invoiceRef = selectedOrder ? selectedOrder.orderId : `RMO-${selectedRawOrder!.id}`;
+      const invoiceRef = targetOrder ? targetOrder.orderId : `RMO-${targetRawOrder!.id}`;
       pdf.text(`Invoice No: INV-${invoiceRef}`, 14, y);
       pdf.text(`Date: ${new Date().toLocaleDateString()}`, 140, y);
       y += 8;
@@ -238,33 +379,40 @@ const BillingPayment = () => {
       y += 10;
 
       pdf.rect(14, y, 182, 12);
-      if (selectedOrder) {
-        pdf.text(`Concrete ${selectedOrder.grade}`, 16, y + 8);
-        pdf.text(`${selectedOrder.quantity} m3`, 110, y + 8);
-        pdf.text(formatCurrency(ratePerCubicMeter), 135, y + 8);
-        pdf.text(formatCurrency(subtotal), 165, y + 8);
+      if (targetOrder) {
+        pdf.text(`Concrete ${targetOrder.grade}`, 16, y + 8);
+        pdf.text(`${targetOrder.quantity} m3`, 110, y + 8);
+        pdf.text(formatCurrency(targetRatePerUnit), 135, y + 8);
+        pdf.text(formatCurrency(targetSubtotal), 165, y + 8);
       } else {
-        pdf.text(`Raw Material ${selectedRawOrder!.materialName}`, 16, y + 8);
-        pdf.text(`${selectedRawOrder!.quantity} ${selectedRawOrder!.unit}`, 110, y + 8);
-        pdf.text(formatCurrency(rawRatePerUnit), 135, y + 8);
-        pdf.text(formatCurrency(subtotal), 165, y + 8);
+        pdf.text(`Raw Material ${targetRawOrder!.materialName}`, 16, y + 8);
+        pdf.text(`${targetRawOrder!.quantity} ${targetRawOrder!.unit}`, 110, y + 8);
+        pdf.text(formatCurrency(targetRatePerUnit), 135, y + 8);
+        pdf.text(formatCurrency(targetSubtotal), 165, y + 8);
       }
       y += 18;
 
-      pdf.text(`Subtotal: ${formatCurrency(subtotal)}`, 132, y);
+      pdf.text(`Subtotal: ${formatCurrency(targetSubtotal)}`, 132, y);
       y += 7;
-      pdf.text(`GST (${GST_RATE}%): ${formatCurrency(gstAmount)}`, 132, y);
+      pdf.text(`GST (${GST_RATE}%): ${formatCurrency(targetGstAmount)}`, 132, y);
       y += 7;
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(12);
-      pdf.text(`Total: ${formatCurrency(totalPayable)}`, 132, y);
+      pdf.text(`Total: ${formatCurrency(targetTotalPayable)}`, 132, y);
       y += 8;
-      pdf.text(`Payment Status: ${paymentStatus.replaceAll("_", " ")}`, 132, y);
+      pdf.text(`Payment Status: ${targetPaymentStatus.replaceAll("_", " ")}`, 132, y);
 
       pdf.save(`Invoice_${invoiceRef}.pdf`);
     } finally {
       setDownloadingPdf(false);
     }
+  };
+
+  const handleDownloadPdf = () => {
+    void downloadInvoicePdf({
+      concreteOrder: selectedOrder,
+      rawOrder: selectedRawOrder,
+    });
   };
 
   return (
@@ -288,9 +436,13 @@ const BillingPayment = () => {
           <label className="block text-sm font-medium text-slate-700 mb-2">Order Invoice</label>
           {loading ? (
             <p className="text-sm text-slate-500">Loading invoice...</p>
-          ) : orders.length === 0 && rawOrders.length === 0 ? (
-            <p className="text-sm text-slate-500">No invoice order found.</p>
-          ) : lockedOrderId || lockedRawOrderId > 0 ? (
+          ) : loadingPayments ? (
+            <p className="text-sm text-slate-500">Loading payment status...</p>
+          ) : pendingConcreteOrders.length === 0 && pendingRawOrders.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No pending payment orders in billing. Completed payments are available in Order History.
+            </p>
+          ) : hasLockedPendingSelection ? (
             <div className="px-4 py-3 border border-slate-300 rounded-xl bg-slate-50 text-sm">
               {selectedOrderId.startsWith("RAW:")
                 ? `RMO-${selectedOrderId.replace("RAW:", "")}`
@@ -298,10 +450,10 @@ const BillingPayment = () => {
             </div>
           ) : (
             <select value={selectedOrderId} onChange={(e) => setSelectedOrderId(e.target.value)} className="w-full md:w-[440px] px-4 py-3 border border-slate-300 rounded-xl">
-              {orders.map((o) => (
+              {pendingConcreteOrders.map((o) => (
                 <option key={`concrete-${o.id}`} value={o.orderId}>{o.orderId} - {o.grade} (Concrete)</option>
               ))}
-              {rawOrders.map((o) => (
+              {pendingRawOrders.map((o) => (
                 <option key={`raw-${o.id}`} value={`RAW:${o.id}`}>
                   RMO-{o.id} - {o.materialName} (Raw Material)
                 </option>
@@ -357,12 +509,75 @@ const BillingPayment = () => {
                 <p className="text-sm"><strong>Email:</strong> {customerEmail}</p>
                 <p className="text-sm"><strong>Phone:</strong> {customerPhone}</p>
                 <p className="text-sm"><strong>Address:</strong> {selectedRawOrder?.address || customerAddress}</p>
-                <p className="text-sm mt-2"><strong>Payment Method:</strong> {paymentMethodLabel}</p>
                 <p className="text-sm mt-2"><strong>Payment Status:</strong> {paymentStatus.replaceAll("_", " ")}</p>
               </div>
             </section>
           </>
         )}
+
+        <section className="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-lg font-semibold text-slate-800">Order History (Payment Completed)</h2>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+              {completedConcreteOrders.length + completedRawOrders.length} completed
+            </span>
+          </div>
+
+          {loadingPayments ? (
+            <p className="text-sm text-slate-500 mt-4">Loading completed payment history...</p>
+          ) : completedConcreteOrders.length === 0 && completedRawOrders.length === 0 ? (
+            <p className="text-sm text-slate-500 mt-4">No completed payment orders yet.</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {completedConcreteOrders.map((order) => {
+                const summary = concreteSummaryByOrderId[order.orderId];
+                return (
+                  <div key={`history-concrete-${order.id}`} className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-sm font-semibold text-slate-800">{order.orderId} - {order.grade} (Concrete)</p>
+                    <p className="text-sm text-slate-600">Quantity: {order.quantity} m3</p>
+                    <p className="text-sm text-slate-600">Invoice Total: {formatCurrency(summary?.totalPayable || 0)}</p>
+                    <p className="text-sm text-emerald-700 font-semibold">Payment Status: PAYMENT COMPLETED</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadInvoicePdf({
+                          concreteOrder: order,
+                          paymentStatusOverride: "PAYMENT_COMPLETED",
+                        })
+                      }
+                      disabled={downloadingPdf}
+                      className="mt-3 px-3 py-2 rounded-lg bg-slate-700 text-white text-xs font-medium disabled:opacity-60"
+                    >
+                      {downloadingPdf ? "Preparing PDF..." : "Download Invoice PDF"}
+                    </button>
+                  </div>
+                );
+              })}
+
+              {completedRawOrders.map((order) => (
+                <div key={`history-raw-${order.id}`} className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-semibold text-slate-800">RMO-{order.id} - {order.materialName} (Raw Material)</p>
+                  <p className="text-sm text-slate-600">Quantity: {order.quantity} {order.unit}</p>
+                  <p className="text-sm text-slate-600">Invoice Total: {formatCurrency(order.totalPrice || 0)}</p>
+                  <p className="text-sm text-emerald-700 font-semibold">Payment Status: PAYMENT COMPLETED</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadInvoicePdf({
+                        rawOrder: order,
+                        paymentStatusOverride: "PAYMENT_COMPLETED",
+                      })
+                    }
+                    disabled={downloadingPdf}
+                    className="mt-3 px-3 py-2 rounded-lg bg-slate-700 text-white text-xs font-medium disabled:opacity-60"
+                  >
+                    {downloadingPdf ? "Preparing PDF..." : "Download Invoice PDF"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

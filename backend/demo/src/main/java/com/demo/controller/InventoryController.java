@@ -65,6 +65,15 @@ public class InventoryController {
         try {
             RawMaterial material = rawMaterialRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Material not found"));
+            String nextName = payload.getName() == null ? material.getName() : payload.getName().trim();
+            if (nextName.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Material name is required"));
+            }
+            Optional<RawMaterial> duplicate = rawMaterialRepository.findByNameIgnoreCase(nextName);
+            if (duplicate.isPresent() && !duplicate.get().getId().equals(material.getId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Material already exists"));
+            }
+            material.setName(nextName);
             material.setUnit(payload.getUnit());
             material.setSupplier(payload.getSupplier());
             material.setReorderLevel(payload.getReorderLevel());
