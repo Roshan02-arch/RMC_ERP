@@ -129,6 +129,18 @@ const AdminDashboard = () => {
             Inventory
           </button>
 
+          <button onClick={() => navigate("/admin/finance")} className="text-left hover:text-indigo-400 transition">
+            Finance
+          </button>
+
+          <button onClick={() => navigate("/admin/quality-control")} className="text-left hover:text-indigo-400 transition">
+            Quality Control
+          </button>
+
+          <button onClick={() => navigate("/admin/maintenance")} className="text-left hover:text-indigo-400 transition">
+            Maintenance
+          </button>
+
           <button
             onClick={() => {
               localStorage.clear();

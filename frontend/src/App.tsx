@@ -23,6 +23,9 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import HomePage from "./Pages/customer/HomePage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
+import AboutUsPage from "./Pages/customer/AboutUsPage";
+import ContactUsPage from "./Pages/customer/ContactUsPage";
+import AdminMaintenance from "./Pages/admin/AdminMaintenance";
 
 function App() {
   return (
@@ -54,6 +57,8 @@ function App() {
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
           <Route path="/customize-profile" element={<CustomizeProfile />} />
+          <Route path="/about-us" element={<AboutUsPage/>} />
+          <Route path="/contact-us" element={<ContactUsPage />} />
         </Route>
 
         {/* Admin */}
@@ -128,6 +133,14 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+                  path="/admin/maintenance"
+                  element={
+                    <ProtectedRoute role="ADMIN">
+                      <AdminMaintenance />
+                    </ProtectedRoute>
+                  }
+                />
 
       </Routes>
     </BrowserRouter>

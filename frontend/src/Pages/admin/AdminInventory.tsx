@@ -546,6 +546,8 @@ const AdminInventory = () => {
           <button onClick={() => navigate("/admin/adminlogins")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Admin Logins</button>
           <button onClick={() => navigate("/admin/schedule")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Schedule</button>
           <button onClick={() => navigate("/admin/inventory")} className="text-left px-3 py-2 rounded-lg bg-slate-800">Inventory</button>
+          <button onClick={() => navigate("/admin/finance")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Finance</button>
+          <button onClick={() => navigate("/admin/quality-control")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Quality Control</button>
           <button onClick={() => navigate("/admin/maintenance")} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition">Maintenance</button>
           <button
             onClick={() => {
