@@ -39,6 +39,8 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/about-us" element={<AboutUsPage />} />
+        <Route path="/contact-us" element={<ContactUsPage />} />
 
         {/* Customer */}
         <Route
@@ -57,8 +59,6 @@ function App() {
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
           <Route path="/customize-profile" element={<CustomizeProfile />} />
-          <Route path="/about-us" element={<AboutUsPage/>} />
-          <Route path="/contact-us" element={<ContactUsPage />} />
         </Route>
 
         {/* Admin */}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import { FaCubes, FaUserTie, FaTruckFast, FaHandshake } from "react-icons/fa6";
+import GlobalFooter from "../../components/GlobalFooter";
 
 const slides = [
   {
@@ -297,6 +298,7 @@ const HomePage = () => {
       </div>
 
 
+      {role !== "CUSTOMER" && <GlobalFooter />}
     </div>
   );
 };

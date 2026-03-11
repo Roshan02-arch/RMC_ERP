@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import UserNavbar from "../../components/UserNavbar";
 import { FaEnvelope, FaLocationDot, FaPhoneVolume } from "react-icons/fa6";
+import GlobalFooter from "../../components/GlobalFooter";
 
 const ContactUsPage = () => {
   const role = normalizeRole(localStorage.getItem("role"));
@@ -110,6 +111,8 @@ const ContactUsPage = () => {
           </div>
         </section>
       </main>
+
+      <GlobalFooter />
     </div>
   );
 };

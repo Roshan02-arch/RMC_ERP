@@ -8,6 +8,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { normalizeRole } from "../../utils/auth";
+import GlobalFooter from "../../components/GlobalFooter";
 
 type LoginForm = {
   email: string;
@@ -1022,7 +1023,7 @@ const Login = () => {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050508] font-sans text-white">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-[#050508] font-sans text-white">
       <QuantumBackground />
 
       <div className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/20 backdrop-blur-xl">
@@ -1058,7 +1059,7 @@ const Login = () => {
         ))}
       </div>
 
-      <div className="relative z-30 flex min-h-screen items-center justify-center px-4 pt-20">
+      <div className="relative z-30 flex flex-1 items-center justify-center px-4 pb-8 pt-24">
         <div className="w-full max-w-md rounded-3xl border border-white/10 border-t-white/20 border-l-white/20 bg-white/10 p-8 shadow-2xl backdrop-blur-2xl">
           <div className="mb-8 text-center">
             <div className="mb-4 flex items-center justify-center gap-6">
@@ -1198,6 +1199,8 @@ const Login = () => {
           </div>
         </div>
       </div>
+
+      <GlobalFooter className="relative z-30" titleClassName="text-white/90" textClassName="text-white/70" />
     </div>
   );
 };

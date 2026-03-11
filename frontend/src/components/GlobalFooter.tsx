@@ -1,8 +1,20 @@
-const GlobalFooter = () => {
+interface GlobalFooterProps {
+  className?: string;
+  titleClassName?: string;
+  textClassName?: string;
+}
+
+const GlobalFooter = ({
+  className = "",
+  titleClassName = "text-slate-800",
+  textClassName = "text-slate-600",
+}: GlobalFooterProps) => {
   return (
-    <footer className="bg-slate-900 text-gray-300 py-6 text-center border-t border-slate-800">
-      <h3 className="text-base font-semibold text-white">RMC ERP System</h3>
-      <p className="text-sm mt-1">© {new Date().getFullYear()} RMC ERP. All Rights Reserved.</p>
+    <footer className={`py-6 text-center ${className}`}>
+      <h3 className={`text-base font-semibold ${titleClassName}`}>RMC ERP System</h3>
+      <p className={`mt-1 text-sm ${textClassName}`}>
+        © {new Date().getFullYear()} RMC ERP. All Rights Reserved.
+      </p>
     </footer>
   );
 };

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import { FaCircleCheck } from "react-icons/fa6";
 import UserNavbar from "../../components/UserNavbar";
+import GlobalFooter from "../../components/GlobalFooter";
 
 const AboutUsPage = () => {
   const [showMore, setShowMore] = useState(false);
@@ -179,6 +180,8 @@ const AboutUsPage = () => {
           </div>
         </div>
       </section>
+
+      <GlobalFooter />
     </div>
   );
 };
