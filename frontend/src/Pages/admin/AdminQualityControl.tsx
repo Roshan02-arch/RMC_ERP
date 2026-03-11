@@ -108,7 +108,7 @@ const AdminQualityControl = () => {
 
   const qualitySummary = useMemo(() => {
     const total = inspections.length;
-    const compliant = inspections.filter((item) => item.compliancePassed).length;
+    const compliant = inspections.filter((item) => item.slumpWithinStandard).length;
     const certificates = inspections.filter((item) => item.qualityCertificateGenerated).length;
     return { total, compliant, certificates };
   }, [inspections]);
@@ -383,7 +383,7 @@ const AdminQualityControl = () => {
             <p className="text-2xl font-bold text-gray-800 mt-1">{qualitySummary.total}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase">Compliance Pass</p>
+            <p className="text-xs text-gray-500 uppercase">Slump Within Standard</p>
             <p className="text-2xl font-bold text-emerald-700 mt-1">{qualitySummary.compliant}</p>
           </div>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -652,7 +652,7 @@ const AdminQualityControl = () => {
                   <th className="px-3 py-2">Mix</th>
                   <th className="px-3 py-2">Slump</th>
                   <th className="px-3 py-2">Cube 7/14/28</th>
-                  <th className="px-3 py-2">Compliance</th>
+                  <th className="px-3 py-2">Slump Compliance</th>
                   <th className="px-3 py-2">Certificate</th>
                 </tr>
               </thead>
@@ -672,8 +672,8 @@ const AdminQualityControl = () => {
                       {inspection.cubeStrength7DayMpa} / {inspection.cubeStrength14DayMpa} / {inspection.cubeStrength28DayMpa} MPa
                     </td>
                     <td className="px-3 py-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${inspection.compliancePassed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                        {inspection.compliancePassed ? "PASS" : "DEVIATION"}
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${inspection.slumpWithinStandard ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        {inspection.slumpWithinStandard ? "PASS" : "DEVIATION"}
                       </span>
                     </td>
                     <td className="px-3 py-2">
