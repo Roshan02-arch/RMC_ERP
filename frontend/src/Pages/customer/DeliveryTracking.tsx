@@ -15,6 +15,11 @@ type Order = {
   driverShift?: string;
   latestNotification?: string;
   approvedAt?: string;
+  paymentOption?: string;
+  creditDays?: number;
+  creditApprovalStatus?: string;
+  creditDueDate?: string;
+  creditReviewRemark?: string;
 };
 
 type TrackingView = {
@@ -325,6 +330,19 @@ const DeliveryTracking = () => {
                 Delay/Update Notification: {selectedOrder ? trackingView?.latestNotification || selectedOrder.latestNotification || "No updates" : "Status updates available from admin."}
               </p>
             </div>
+
+            {selectedOrder && String(selectedOrder.paymentOption || "").toUpperCase() === "PAY_LATER" && (
+              <div className="bg-white rounded-2xl shadow-md p-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Credit Approval Detail</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-700">
+                  <p><span className="font-semibold">Credit Status:</span> {(selectedOrder.creditApprovalStatus || "PENDING").replaceAll("_", " ")}</p>
+                  <p><span className="font-semibold">Credit Days:</span> {selectedOrder.creditDays || "-"} days</p>
+                  <p><span className="font-semibold">Approved At:</span> {selectedOrder.approvedAt || "-"}</p>
+                  <p><span className="font-semibold">Due Date:</span> {selectedOrder.creditDueDate || "-"}</p>
+                  <p className="md:col-span-2"><span className="font-semibold">Admin Remark:</span> {selectedOrder.creditReviewRemark || selectedOrder.latestNotification || "-"}</p>
+                </div>
+              </div>
+            )}
 
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Delivery Confirmation</h2>

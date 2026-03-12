@@ -14,8 +14,10 @@ import com.demo.entity.Order;
 import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
 import com.demo.entity.PaymentRecord;
+import com.demo.entity.CustomerNotification;
 import com.demo.entity.TransitMixer;
 import com.demo.entity.User;
+import com.demo.repository.CustomerNotificationRepository;
 import com.demo.repository.DispatchTripRecordRepository;
 import com.demo.repository.DriverRepository;
 import com.demo.repository.OrderAssignmentRepository;
@@ -26,7 +28,10 @@ import com.demo.repository.TransitMixerRepository;
 import com.demo.repository.UserRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,11 +42,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin")
 @CrossOrigin("*")
 public class AdminController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
     @Autowired
     private OrderRepository orderRepository;
@@ -67,12 +75,15 @@ public class AdminController {
     @Autowired
     private QualityInspectionRepository qualityInspectionRepository;
 
+    @Autowired
+    private CustomerNotificationRepository customerNotificationRepository;
+
 
     // ? 1. Get All Orders
     @GetMapping("/orders")
     public List<Map<String, Object>> getAllOrders() {
         List<Map<String, Object>> response = new ArrayList<>();
-        for (Order order : orderRepository.findAll()) {
+        for (Order order : orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id"))) {
             response.add(toOrderView(order));
         }
         return response;
@@ -100,15 +111,31 @@ public class AdminController {
         try {
             OrderStatus newStatus = OrderStatus.valueOf(status.toUpperCase());
             order.setStatus(newStatus);
+            if (newStatus == OrderStatus.APPROVED && order.getApprovedAt() == null) {
+                order.setApprovedAt(LocalDateTime.now());
+            }
             if (newStatus == OrderStatus.DELIVERED) {
                 order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DELIVERED);
                 if (order.getDeliveredAt() == null) {
                     order.setDeliveredAt(LocalDateTime.now());
                 }
+                order.setLatestNotification("Order completed successfully");
             } else if (newStatus == OrderStatus.DISPATCHED) {
                 order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DISPATCHED);
+            } else if (newStatus == OrderStatus.APPROVED) {
+                order.setLatestNotification("Order approved by admin");
+            } else if (newStatus == OrderStatus.REJECTED) {
+                order.setLatestNotification("Order rejected by admin");
             }
             orderRepository.save(order);
+
+            if (newStatus == OrderStatus.APPROVED) {
+                createNotification(order, "Order approved", "Your order " + order.getOrderId() + " is approved by admin.", "ORDER", null);
+            } else if (newStatus == OrderStatus.REJECTED) {
+                createNotification(order, "Order rejected", "Your order " + order.getOrderId() + " was rejected by admin.", "ORDER", null);
+            } else if (newStatus == OrderStatus.DELIVERED) {
+                createNotification(order, "Order completed", "Order " + order.getOrderId() + " has been completed successfully.", "DELIVERY", null);
+            }
 
             return ResponseEntity.ok(Map.of(
                     "message", "Order status updated successfully",
@@ -168,8 +195,14 @@ public class AdminController {
 
         order.setStatus(OrderStatus.APPROVED);
         order.setApprovedAt(LocalDateTime.now());
+        if ("PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+            order.setCreditApprovalStatus("APPROVED");
+            order.setCreditReviewedAt(LocalDateTime.now());
+            order.setLatestNotification("Credit approved by admin");
+        }
 
         orderRepository.save(order);
+        createNotification(order, "Order approved", "Your order " + order.getOrderId() + " is approved by admin.", "ORDER", null);
 
         return ResponseEntity.ok("Order Approved");
     }
@@ -180,9 +213,124 @@ public class AdminController {
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
         order.setStatus(OrderStatus.REJECTED);
+        if ("PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+            order.setCreditApprovalStatus("REJECTED");
+            order.setCreditReviewedAt(LocalDateTime.now());
+            order.setLatestNotification("Admin rejected credit request. Complete payment to continue.");
+        }
         orderRepository.save(order);
+        createNotification(order, "Order rejected", "Your order " + order.getOrderId() + " was rejected by admin.", "ORDER", null);
 
         return ResponseEntity.ok("Order Rejected");
+    }
+
+    @PutMapping("/orders/{orderId}/credit/approve")
+    public ResponseEntity<?> approveCreditOrder(
+            @PathVariable String orderId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        try {
+            Order order = orderRepository.findByOrderId(orderId)
+                    .orElseThrow(() -> new RuntimeException("Order not found"));
+
+            if (!"PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "This order is not a pay later order"));
+            }
+
+            String remark = payload != null ? String.valueOf(payload.getOrDefault("remark", "")).trim() : "";
+
+            order.setStatus(OrderStatus.APPROVED);
+            order.setApprovedAt(LocalDateTime.now());
+            order.setCreditApprovalStatus("APPROVED");
+            order.setCreditReviewedAt(LocalDateTime.now());
+            if (order.getCreditDueDate() == null && order.getCreditDays() != null && order.getCreditDays() > 0) {
+                order.setCreditDueDate(LocalDateTime.now().plusDays(order.getCreditDays()));
+            }
+            if (!remark.isEmpty()) {
+                order.setCreditReviewRemark(remark);
+            }
+            order.setLatestNotification("Credit approved by admin");
+            orderRepository.save(order);
+            createNotification(order, "Credit approved", "Credit approved for order " + order.getOrderId() + ". Due date: " + order.getCreditDueDate(), "CREDIT", null);
+
+            return ResponseEntity.ok(Map.of("message", "Credit approved successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to approve credit for order {}", orderId, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "message", e.getMessage() == null || e.getMessage().isBlank() ? "Unable to approve credit order" : e.getMessage()
+            ));
+        }
+    }
+
+    @PutMapping("/orders/{orderId}/credit/reject")
+    public ResponseEntity<?> rejectCreditOrder(
+            @PathVariable String orderId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+        try {
+            Order order = orderRepository.findByOrderId(orderId)
+                    .orElseThrow(() -> new RuntimeException("Order not found"));
+
+            if (!"PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "This order is not a pay later order"));
+            }
+
+            String remark = payload != null ? String.valueOf(payload.getOrDefault("remark", "")).trim() : "";
+
+            order.setStatus(OrderStatus.REJECTED);
+            order.setCreditApprovalStatus("REJECTED");
+            order.setCreditReviewedAt(LocalDateTime.now());
+            order.setCreditReviewRemark(remark.isEmpty() ? "Credit request rejected by admin" : remark);
+            order.setLatestNotification("Admin rejected credit request. Complete payment to continue.");
+            orderRepository.save(order);
+            createNotification(order, "Credit rejected", "Credit rejected for order " + order.getOrderId() + ". Please complete payment to place order.", "CREDIT", null);
+
+            return ResponseEntity.ok(Map.of("message", "Credit rejected successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to reject credit for order {}", orderId, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "message", e.getMessage() == null || e.getMessage().isBlank() ? "Unable to reject credit order" : e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/orders/{orderId}/payment/complete")
+    public ResponseEntity<?> markPaymentComplete(@PathVariable String orderId) {
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        double subtotal = order.getTotalPrice();
+        double totalPayable = subtotal + ((subtotal * 18.0) / 100.0);
+        double totalPaid = paymentRecordRepository.findByOrder_Id(order.getId())
+                .stream()
+                .filter(record -> record.getMethod() == null
+                        || !record.getMethod().trim().toUpperCase().startsWith("CASH_ON_DELIVERY"))
+                .mapToDouble(PaymentRecord::getAmount)
+                .sum();
+        double outstanding = Math.max(0, totalPayable - totalPaid);
+
+        if (outstanding <= 0.0) {
+            return ResponseEntity.ok(Map.of("message", "Payment already completed"));
+        }
+
+        PaymentRecord record = new PaymentRecord();
+        record.setOrder(order);
+        record.setAmount(outstanding);
+        record.setMethod("ADMIN_MARKED_COMPLETE");
+        record.setPaidAt(LocalDateTime.now());
+        record.setTransactionId("TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        paymentRecordRepository.save(record);
+
+        order.setLatestNotification("Payment marked complete by admin");
+        orderRepository.save(order);
+        createNotification(order, "Payment completed", "Payment completed for order " + order.getOrderId() + ".", "PAYMENT", null);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Payment marked complete successfully",
+                "amount", outstanding
+        ));
     }
 
     @DeleteMapping("/orders/{orderId}")
@@ -266,6 +414,7 @@ public class AdminController {
         assignment.setPriorityLevel(request.getPriorityLevel());
         orderAssignmentRepository.save(assignment);
         orderRepository.save(order);
+        createNotification(order, "Order scheduled", "Production scheduled for order " + order.getOrderId() + ".", "SCHEDULE", null);
 
         return ResponseEntity.ok(Map.of(
                 "message", "Production scheduled successfully",
@@ -340,6 +489,7 @@ public class AdminController {
         order.setDeliveryTrackingStatus(DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH);
         order.setLatestNotification("Dispatch scheduled successfully");
         orderRepository.save(order);
+        createNotification(order, "Dispatch scheduled", "Dispatch scheduled for order " + order.getOrderId() + ".", "DELIVERY", null);
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Dispatch scheduled successfully");
@@ -430,6 +580,7 @@ public class AdminController {
 
         order.setLatestNotification("Vehicle and driver assigned successfully");
         orderRepository.save(order);
+        createNotification(order, "Vehicle assigned", "Vehicle and driver assigned for order " + order.getOrderId() + ".", "DELIVERY", null);
 
         return ResponseEntity.ok(Map.of(
                 "message", "Vehicle and driver assigned successfully",
@@ -483,6 +634,7 @@ public class AdminController {
         order.setLastRescheduledAt(LocalDateTime.now());
         order.setLatestNotification("Schedule updated due to rescheduling");
         orderRepository.save(order);
+        createNotification(order, "Order rescheduled", "Schedule updated for order " + order.getOrderId() + ".", "SCHEDULE", null);
 
         return ResponseEntity.ok(Map.of(
                 "message", "Order rescheduled successfully",
@@ -670,6 +822,14 @@ public class AdminController {
 
         orderRepository.save(order);
 
+        createNotification(
+                order,
+                "Delivery update",
+                "Order " + order.getOrderId() + " delivery status: " + resolveDeliveryStatusLabel(deliveryStatus) + ".",
+                "DELIVERY",
+                null
+        );
+
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Delivery status updated successfully");
         response.put("orderId", order.getOrderId());
@@ -754,10 +914,12 @@ public class AdminController {
             order.setStatus(OrderStatus.DISPATCHED);
             order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DISPATCHED);
             order.setLatestNotification("Trip " + request.getTripNumber() + " dispatched");
+            createNotification(order, "Trip dispatched", "Trip " + request.getTripNumber() + " for order " + order.getOrderId() + " has been dispatched.", "DELIVERY", null);
         } else if (tripStatus == DispatchTripStatus.IN_TRANSIT) {
             order.setStatus(OrderStatus.DISPATCHED);
             order.setDeliveryTrackingStatus(DeliveryTrackingStatus.ON_THE_WAY);
             order.setLatestNotification("Trip " + request.getTripNumber() + " is in transit");
+            createNotification(order, "Order in transit", "Trip " + request.getTripNumber() + " for order " + order.getOrderId() + " is in transit.", "DELIVERY", null);
         } else if (tripStatus == DispatchTripStatus.DELIVERED) {
             if (order.getCompletedTrips() != null && order.getPlannedTrips() != null
                     && order.getCompletedTrips() >= order.getPlannedTrips()) {
@@ -769,14 +931,17 @@ public class AdminController {
                             : LocalDateTime.now());
                 }
                 order.setLatestNotification("All trips delivered successfully");
+                createNotification(order, "Order completed", "Order " + order.getOrderId() + " has been completed and delivered.", "DELIVERY", null);
             } else {
                 order.setStatus(OrderStatus.DISPATCHED);
                 order.setDeliveryTrackingStatus(DeliveryTrackingStatus.ON_THE_WAY);
                 order.setLatestNotification("Trip " + request.getTripNumber() + " delivered");
+                createNotification(order, "Trip delivered", "Trip " + request.getTripNumber() + " for order " + order.getOrderId() + " has been delivered.", "DELIVERY", null);
             }
         } else {
             order.setDeliveryTrackingStatus(DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH);
             order.setLatestNotification("Trip " + request.getTripNumber() + " scheduled");
+            createNotification(order, "Trip scheduled", "Trip " + request.getTripNumber() + " for order " + order.getOrderId() + " has been scheduled.", "DELIVERY", null);
         }
 
         orderRepository.save(order);
@@ -1000,6 +1165,28 @@ public class AdminController {
         return value == null || value.trim().isEmpty();
     }
 
+    private void createNotification(Order order, String title, String message, String type, String reminderKey) {
+        if (order == null || order.getUser() == null) {
+            return;
+        }
+
+        try {
+            CustomerNotification notification = new CustomerNotification();
+            notification.setUser(order.getUser());
+            notification.setOrderId(order.getOrderId());
+            notification.setTitle(title);
+            notification.setMessage(message);
+            notification.setType(type);
+            notification.setCreatedAt(LocalDateTime.now());
+            notification.setRead(false);
+            notification.setDeleted(false);
+            notification.setReminderKey(reminderKey);
+            customerNotificationRepository.save(notification);
+        } catch (Exception ex) {
+            logger.error("Failed to create customer notification for order {}", order.getOrderId(), ex);
+        }
+    }
+
     private OrderAssignment getOrCreateAssignment(Order order) {
         if (order.getId() == null) {
             throw new RuntimeException("Order must exist before assignment");
@@ -1047,6 +1234,13 @@ public class AdminController {
         row.put("totalPrice", order.getTotalPrice());
         row.put("address", order.getAddress());
         row.put("status", order.getStatus());
+        row.put("paymentOption", order.getPaymentOption());
+        row.put("creditDays", order.getCreditDays());
+        row.put("creditApprovalStatus", order.getCreditApprovalStatus());
+        row.put("creditRequestedAt", order.getCreditRequestedAt());
+        row.put("creditReviewedAt", order.getCreditReviewedAt());
+        row.put("creditDueDate", order.getCreditDueDate());
+        row.put("creditReviewRemark", order.getCreditReviewRemark());
         row.put("deliveryDate", order.getDeliveryDate());
         row.put("scheduledDate", order.getScheduledDate());
         row.put("approvedAt", order.getApprovedAt());

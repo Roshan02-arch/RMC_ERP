@@ -10,6 +10,9 @@ interface Order {
   quantity: number;
   status: string;
   deliveryTrackingStatus?: string;
+  paymentOption?: string;
+  creditApprovalStatus?: string;
+  creditDays?: number;
 }
 
 interface QualityStatus {
@@ -148,6 +151,7 @@ const Dashboard = () => {
                   <th className="px-6 py-3">Grade</th>
                   <th className="px-6 py-3">Quantity</th>
                   <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Credit</th>
                   <th className="px-6 py-3">Quality</th>
                 </tr>
               </thead>
@@ -183,6 +187,11 @@ const Dashboard = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
+                        {String(order.paymentOption || "").toUpperCase() === "PAY_LATER"
+                          ? `${(order.creditApprovalStatus || "PENDING").replaceAll("_", " ")}${order.creditDays ? ` (${order.creditDays} days)` : ""}`
+                          : "-"}
+                      </td>
+                      <td className="px-6 py-4">
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-semibold ${
                             qualityLabel === "CERTIFIED"
@@ -202,7 +211,7 @@ const Dashboard = () => {
                 })}
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-6 text-center text-gray-500">
                       No orders found.
                     </td>
                   </tr>

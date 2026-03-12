@@ -18,6 +18,13 @@ public class Order {
     private double quantity;
     private double totalPrice;
     private String address;
+    private String paymentOption;
+    private Integer creditDays;
+    private String creditApprovalStatus;
+    private LocalDateTime creditRequestedAt;
+    private LocalDateTime creditReviewedAt;
+    private LocalDateTime creditDueDate;
+    private String creditReviewRemark;
 
     private LocalDateTime deliveryDate;
     private LocalDateTime scheduledDate;
@@ -107,6 +114,62 @@ public class Order {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    public String getPaymentOption() {
+        return paymentOption;
+    }
+
+    public void setPaymentOption(String paymentOption) {
+        this.paymentOption = paymentOption;
+    }
+
+    public Integer getCreditDays() {
+        return creditDays;
+    }
+
+    public void setCreditDays(Integer creditDays) {
+        this.creditDays = creditDays;
+    }
+
+    public String getCreditApprovalStatus() {
+        return creditApprovalStatus;
+    }
+
+    public void setCreditApprovalStatus(String creditApprovalStatus) {
+        this.creditApprovalStatus = creditApprovalStatus;
+    }
+
+    public LocalDateTime getCreditRequestedAt() {
+        return creditRequestedAt;
+    }
+
+    public void setCreditRequestedAt(LocalDateTime creditRequestedAt) {
+        this.creditRequestedAt = creditRequestedAt;
+    }
+
+    public LocalDateTime getCreditReviewedAt() {
+        return creditReviewedAt;
+    }
+
+    public void setCreditReviewedAt(LocalDateTime creditReviewedAt) {
+        this.creditReviewedAt = creditReviewedAt;
+    }
+
+    public LocalDateTime getCreditDueDate() {
+        return creditDueDate;
+    }
+
+    public void setCreditDueDate(LocalDateTime creditDueDate) {
+        this.creditDueDate = creditDueDate;
+    }
+
+    public String getCreditReviewRemark() {
+        return creditReviewRemark;
+    }
+
+    public void setCreditReviewRemark(String creditReviewRemark) {
+        this.creditReviewRemark = creditReviewRemark;
     }
 
     public LocalDateTime getDeliveryDate() {

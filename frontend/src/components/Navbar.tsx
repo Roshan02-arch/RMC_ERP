@@ -157,6 +157,13 @@ const Navbar = () => {
                   Delivery Tracking
                 </NavLink>
                 <NavLink
+                  to="/pay-later-orders"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  Pay Later Orders
+                </NavLink>
+                <NavLink
                   to="/billing-payment"
                   className={menuItemClass}
                   onClick={() => setShowMenu(false)}
@@ -174,7 +181,20 @@ const Navbar = () => {
                   type="button"
                   onClick={() => {
                     setShowMenu(false);
+                    const currentUserId = localStorage.getItem("userId");
+                    const deletedNotifications = currentUserId
+                      ? localStorage.getItem(`customer_notification_deleted_${currentUserId}`)
+                      : null;
+                    const shownToasts = currentUserId
+                      ? localStorage.getItem(`customer_notification_toast_shown_${currentUserId}`)
+                      : null;
                     localStorage.clear();
+                    if (currentUserId && deletedNotifications) {
+                      localStorage.setItem(`customer_notification_deleted_${currentUserId}`, deletedNotifications);
+                    }
+                    if (currentUserId && shownToasts) {
+                      localStorage.setItem(`customer_notification_toast_shown_${currentUserId}`, shownToasts);
+                    }
                     navigate("/login");
                   }}
                   className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50 hover:text-red-600 transition"

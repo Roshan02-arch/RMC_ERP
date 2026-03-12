@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 interface Order {
   id: number;
   orderId: string;
   status: string;
+  paymentOption?: string;
+  creditDays?: number;
+  creditApprovalStatus?: string;
+  creditDueDate?: string;
   deliveryTrackingStatusLabel?: string;
   productionDate?: string;
   productionSlotStart?: string;
@@ -64,6 +68,7 @@ const TRACKING_API = "http://localhost:8080/api/delivery-tracking";
 
 const AdminSchedule = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showMessage, dialogNode } = useCenteredDialog();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -113,6 +118,7 @@ const AdminSchedule = () => {
   });
   const [tripRecords, setTripRecords] = useState<TripRecord[]>([]);
   const [monitoringRecords, setMonitoringRecords] = useState<MonitoringRecord[]>([]);
+  const navState = (location.state as { selectedOrderId?: string } | null) || null;
 
   const [rescheduleReason, setRescheduleReason] = useState("");
 
@@ -154,6 +160,10 @@ const AdminSchedule = () => {
       setOrders(items);
       if (items.length === 0) {
         setSelectedOrderId("");
+        return;
+      }
+      if (navState?.selectedOrderId && items.some((order: Order) => order.orderId === navState.selectedOrderId)) {
+        setSelectedOrderId(navState.selectedOrderId);
         return;
       }
       if (!selectedOrderId) {
@@ -874,6 +884,10 @@ const AdminSchedule = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm text-gray-700">
               <p><span className="font-semibold">Order:</span> {selectedOrder.orderId}</p>
               <p><span className="font-semibold">Status:</span> {selectedOrder.status}</p>
+              <p><span className="font-semibold">Payment Option:</span> {(selectedOrder.paymentOption || "-").replaceAll("_", " ")}</p>
+              <p><span className="font-semibold">Credit Status:</span> {(selectedOrder.creditApprovalStatus || "-").replaceAll("_", " ")}</p>
+              <p><span className="font-semibold">Credit Days:</span> {selectedOrder.creditDays ?? "-"}</p>
+              <p><span className="font-semibold">Credit Due Date:</span> {selectedOrder.creditDueDate || "-"}</p>
               <p><span className="font-semibold">Delivery Status:</span> {selectedOrder.deliveryTrackingStatusLabel || "-"}</p>
               <p><span className="font-semibold">Production Date:</span> {selectedOrder.productionDate || "-"}</p>
               <p><span className="font-semibold">Production Slot:</span> {selectedOrder.productionSlotStart || "-"} to {selectedOrder.productionSlotEnd || "-"}</p>

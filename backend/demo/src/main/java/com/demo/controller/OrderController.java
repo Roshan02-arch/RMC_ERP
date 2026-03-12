@@ -4,16 +4,21 @@ import com.demo.entity.Order;
 import com.demo.entity.OrderStatus;
 import com.demo.entity.PaymentRecord;
 import com.demo.entity.User;
+import com.demo.entity.CustomerNotification;
 import com.demo.entity.ConcreteProductStock;
 import com.demo.repository.ConcreteProductStockRepository;
+import com.demo.repository.CustomerNotificationRepository;
 import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.UserRepository;
 import com.demo.service.OrderService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +28,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/orders")
 @CrossOrigin("*")
 public class OrderController {
+
+    private static final Logger logger = LoggerFactory.getLogger(OrderController.class);
 
     @Autowired
     private OrderService orderService;
@@ -35,6 +42,9 @@ public class OrderController {
 
     @Autowired
     private ConcreteProductStockRepository productStockRepository;
+
+    @Autowired
+    private CustomerNotificationRepository customerNotificationRepository;
 
     // ✅ GET ALL
     @GetMapping
@@ -130,6 +140,11 @@ public class OrderController {
             String grade = String.valueOf(payload.getOrDefault("grade", "")).trim();
             double quantity = Double.parseDouble(String.valueOf(payload.getOrDefault("quantity", 0)));
             String address = String.valueOf(payload.getOrDefault("address", "")).trim();
+            String paymentOption = String.valueOf(payload.getOrDefault("paymentOption", "ONLINE")).trim().toUpperCase();
+            Integer creditDays = null;
+            if (payload.get("creditDays") != null) {
+                creditDays = Integer.valueOf(String.valueOf(payload.get("creditDays")));
+            }
 
             if (grade.isEmpty() || quantity <= 0 || address.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid order details"));
@@ -149,7 +164,23 @@ public class OrderController {
             order.setGrade(grade);
             order.setQuantity(quantity);
             order.setAddress(address);
-            order.setStatus(OrderStatus.APPROVED);
+            order.setPaymentOption(paymentOption);
+            if ("PAY_LATER".equals(paymentOption)) {
+                if (creditDays == null || creditDays <= 0) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Credit days are required for pay later"));
+                }
+                order.setCreditDays(creditDays);
+                order.setCreditApprovalStatus("PENDING");
+                order.setCreditRequestedAt(LocalDateTime.now());
+                order.setCreditDueDate(LocalDateTime.now().plusDays(creditDays));
+                order.setLatestNotification("Pay later request submitted and waiting for admin approval");
+                order.setStatus(OrderStatus.PENDING_APPROVAL);
+            } else {
+                order.setCreditDays(null);
+                order.setCreditApprovalStatus("NOT_REQUIRED");
+                order.setStatus(OrderStatus.APPROVED);
+                order.setApprovedAt(LocalDateTime.now());
+            }
             order.setTotalPrice(resolveTotalPrice(grade, quantity, payload.get("totalPrice")));
             order.setUser(user);
 
@@ -166,17 +197,42 @@ public class OrderController {
             product.setUpdatedAt(LocalDateTime.now());
             productStockRepository.save(product);
 
-            return ResponseEntity.ok(Map.of(
-                    "message", "Order created successfully",
-                    "id", saved.getId(),
-                    "orderId", saved.getOrderId(),
-                    "grade", saved.getGrade(),
-                    "quantity", saved.getQuantity(),
-                    "status", saved.getStatus(),
-                    "totalPrice", saved.getTotalPrice()
-            ));
+            if ("PAY_LATER".equals(saved.getPaymentOption())) {
+                try {
+                    CustomerNotification notification = new CustomerNotification();
+                    notification.setUser(user);
+                    notification.setOrderId(saved.getOrderId());
+                    notification.setTitle("Pay later request submitted");
+                    notification.setMessage("Order " + saved.getOrderId() + " was submitted for credit approval. Admin review is pending.");
+                    notification.setType("ORDER");
+                    notification.setCreatedAt(LocalDateTime.now());
+                    notification.setRead(false);
+                    notification.setDeleted(false);
+                    notification.setReminderKey(saved.getOrderId() + "-credit-request");
+                    customerNotificationRepository.save(notification);
+                } catch (Exception notificationError) {
+                    logger.error("Failed to create order notification for {}", saved.getOrderId(), notificationError);
+                }
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Order created successfully");
+            response.put("id", saved.getId());
+            response.put("orderId", saved.getOrderId());
+            response.put("grade", saved.getGrade());
+            response.put("quantity", saved.getQuantity());
+            response.put("status", saved.getStatus());
+            response.put("totalPrice", saved.getTotalPrice());
+            response.put("paymentOption", saved.getPaymentOption());
+            response.put("creditDays", saved.getCreditDays());
+            response.put("creditApprovalStatus", saved.getCreditApprovalStatus());
+            response.put("creditDueDate", saved.getCreditDueDate());
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Unable to create order"));
+            logger.error("Unable to create order", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "message", e.getMessage() == null || e.getMessage().isBlank() ? "Unable to create order" : e.getMessage()
+            ));
         }
     }
 
