@@ -3,16 +3,19 @@ package com.demo.controller;
 import com.demo.dto.DeliveryTrackingUpdateRequest;
 import com.demo.entity.DeliveryTrackingStatus;
 import com.demo.entity.Driver;
+import com.demo.entity.NotificationType;
 import com.demo.entity.Order;
 import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
 import com.demo.entity.TransitMixer;
 import com.demo.entity.User;
 import com.demo.repository.DriverRepository;
+import com.demo.repository.DispatchTripRecordRepository;
 import com.demo.repository.OrderAssignmentRepository;
 import com.demo.repository.OrderRepository;
 import com.demo.repository.TransitMixerRepository;
 import com.demo.repository.UserRepository;
+import com.demo.service.OrderNotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -49,6 +52,12 @@ public class DeliveryTrackingController {
     @Autowired
     private TransitMixerRepository transitMixerRepository;
 
+    @Autowired
+    private OrderNotificationService orderNotificationService;
+
+    @Autowired
+    private DispatchTripRecordRepository dispatchTripRecordRepository;
+
     @GetMapping("/orders/{orderId}")
     public ResponseEntity<?> getTracking(@PathVariable String orderId, @RequestParam Long userId) {
         User user = userRepository.findById(userId).orElse(null);
@@ -69,6 +78,8 @@ public class DeliveryTrackingController {
         boolean gpsAvailable = order.getLiveLatitude() != null && order.getLiveLongitude() != null;
         boolean delivered = trackingStatus == DeliveryTrackingStatus.DELIVERED
                 || order.getStatus() == OrderStatus.DELIVERED;
+        boolean returned = trackingStatus == DeliveryTrackingStatus.RETURNED
+                || order.getStatus() == OrderStatus.RETURNED;
 
         Map<String, Object> dispatchInformation = new HashMap<>();
         dispatchInformation.put("dispatchStatus", trackingStatus);
@@ -105,8 +116,11 @@ public class DeliveryTrackingController {
 
         Map<String, Object> deliveryConfirmation = new HashMap<>();
         deliveryConfirmation.put("delivered", delivered);
+        deliveryConfirmation.put("returned", returned);
         deliveryConfirmation.put("deliveredAt", order.getDeliveredAt());
         deliveryConfirmation.put("details", order.getDeliveryConfirmationDetails());
+        deliveryConfirmation.put("returnReason", order.getReturnReason());
+        deliveryConfirmation.put("returnedQuantity", order.getReturnedQuantity());
 
         Map<String, Object> response = new HashMap<>();
         response.put("orderId", order.getOrderId());
@@ -115,7 +129,24 @@ public class DeliveryTrackingController {
         response.put("realTimeTracking", realtimeTracking);
         response.put("estimatedDeliveryTime", estimatedDelivery);
         response.put("deliveryConfirmation", deliveryConfirmation);
-        response.put("nextStage", delivered ? "BILLING_AND_PAYMENT" : "DELIVERY_IN_PROGRESS");
+        response.put("tripDetails", dispatchTripRecordRepository.findByOrder_IdOrderByTripNumberAsc(order.getId())
+                .stream()
+                .map(trip -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("tripNumber", trip.getTripNumber());
+                    row.put("status", trip.getStatus() == null ? "" : trip.getStatus().name());
+                    row.put("shift", trip.getShift() == null ? "" : trip.getShift());
+                    row.put("tripQuantityM3", trip.getTripQuantityM3());
+                    row.put("transitMixerNumber", trip.getTransitMixerNumber() == null ? "" : trip.getTransitMixerNumber());
+                    row.put("driverName", trip.getDriverName() == null ? "" : trip.getDriverName());
+                    row.put("dispatchTime", trip.getScheduledDispatchTime());
+                    row.put("estimatedDeliveryTime", trip.getEstimatedDeliveryTime());
+                    row.put("returnReason", trip.getReturnReason() == null ? "" : trip.getReturnReason());
+                    row.put("returnedQuantity", trip.getReturnedQuantity());
+                    return row;
+                })
+                .toList());
+        response.put("nextStage", delivered ? "BILLING_AND_PAYMENT" : returned ? "DELIVERY_RETURNED" : "DELIVERY_IN_PROGRESS");
 
         return ResponseEntity.ok(response);
     }
@@ -138,6 +169,10 @@ public class DeliveryTrackingController {
         if (order == null) {
             return ResponseEntity.status(404).body(Map.of("message", "Order not found"));
         }
+
+        OrderStatus previousStatus = order.getStatus();
+        DeliveryTrackingStatus previousTrackingStatus = resolveTrackingStatus(order);
+        String previousLatestNotification = order.getLatestNotification();
 
         LocalDateTime dispatchDateTime = request.getDispatchDateTime() != null
                 ? request.getDispatchDateTime()
@@ -178,6 +213,12 @@ public class DeliveryTrackingController {
         if (request.getDeliveredAt() != null) {
             order.setDeliveredAt(request.getDeliveredAt());
         }
+        if (!isBlank(request.getReturnReason())) {
+            order.setReturnReason(request.getReturnReason().trim());
+        }
+        if (request.getReturnedQuantity() != null && request.getReturnedQuantity() > 0) {
+            order.setReturnedQuantity(request.getReturnedQuantity());
+        }
 
         OrderAssignment assignment = getOrCreateAssignment(order);
         if (!isBlank(request.getDriverName())) {
@@ -195,47 +236,113 @@ public class DeliveryTrackingController {
             }
 
             order.setDeliveryTrackingStatus(trackingStatus);
-            if (trackingStatus == DeliveryTrackingStatus.DELIVERED) {
+            if (trackingStatus == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH) {
+                if (order.getStatus() != OrderStatus.IN_PRODUCTION) {
+                    order.setStatus(OrderStatus.APPROVED);
+                }
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+            } else if (trackingStatus == DeliveryTrackingStatus.DELIVERED) {
                 order.setStatus(OrderStatus.DELIVERED);
                 if (order.getDeliveredAt() == null) {
                     order.setDeliveredAt(LocalDateTime.now());
                 }
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
                 if (isBlank(order.getLatestNotification())) {
                     order.setLatestNotification("Concrete delivered successfully");
+                }
+            } else if (trackingStatus == DeliveryTrackingStatus.RETURNED) {
+                order.setStatus(OrderStatus.RETURNED);
+                order.setDeliveredAt(null);
+                if (isBlank(order.getReturnReason())) {
+                    order.setReturnReason("Returned from site");
+                }
+                if (order.getReturnedQuantity() == null || order.getReturnedQuantity() <= 0) {
+                    order.setReturnedQuantity(order.getQuantity());
+                }
+                if (isBlank(order.getLatestNotification())) {
+                    order.setLatestNotification("Delivery returned: " + order.getReturnReason());
                 }
             } else if (trackingStatus == DeliveryTrackingStatus.DISPATCHED
                     || trackingStatus == DeliveryTrackingStatus.IN_TRANSIT
                     || trackingStatus == DeliveryTrackingStatus.ON_THE_WAY) {
                 order.setStatus(OrderStatus.DISPATCHED);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
             }
         }
 
-        orderRepository.save(order);
-
         DeliveryTrackingStatus updatedStatus = resolveTrackingStatus(order);
+        orderRepository.save(order);
+        boolean shouldNotify = !Objects.equals(previousStatus, order.getStatus())
+                || !Objects.equals(previousTrackingStatus, updatedStatus)
+                || (!isBlank(order.getLatestNotification()) && !Objects.equals(previousLatestNotification, order.getLatestNotification()));
+        if (shouldNotify) {
+            if (updatedStatus == DeliveryTrackingStatus.DELIVERED || order.getStatus() == OrderStatus.DELIVERED) {
+                orderNotificationService.createNotification(order, NotificationType.ORDER_DELIVERED);
+            } else if (updatedStatus == DeliveryTrackingStatus.RETURNED || order.getStatus() == OrderStatus.RETURNED) {
+                orderNotificationService.createNotification(order, NotificationType.ORDER_RETURNED);
+            } else if (updatedStatus == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH) {
+                orderNotificationService.createNotification(order, NotificationType.DISPATCH_SCHEDULED);
+            } else if (order.getStatus() == OrderStatus.IN_PRODUCTION) {
+                orderNotificationService.createNotification(order, NotificationType.IN_PRODUCTION);
+            } else if (order.getStatus() == OrderStatus.APPROVED && updatedStatus == null) {
+                orderNotificationService.createNotification(order, NotificationType.ORDER_APPROVED);
+            } else {
+                orderNotificationService.createNotification(order, NotificationType.DELIVERY_STATUS_UPDATED);
+            }
+        }
+
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Delivery tracking updated successfully");
         response.put("orderId", order.getOrderId());
         response.put("deliveryStatus", updatedStatus);
         response.put("nextStage", updatedStatus == DeliveryTrackingStatus.DELIVERED
                 ? "BILLING_AND_PAYMENT"
-                : "DELIVERY_IN_PROGRESS");
+                : updatedStatus == DeliveryTrackingStatus.RETURNED
+                    ? "DELIVERY_RETURNED"
+                    : "DELIVERY_IN_PROGRESS");
         return ResponseEntity.ok(response);
     }
 
     private DeliveryTrackingStatus resolveTrackingStatus(Order order) {
-        if (order.getDeliveryTrackingStatus() != null) {
-            if (order.getDeliveryTrackingStatus() == DeliveryTrackingStatus.ON_THE_WAY) {
-                return DeliveryTrackingStatus.IN_TRANSIT;
-            }
-            return order.getDeliveryTrackingStatus();
+        if (order.getStatus() == OrderStatus.RETURNED) {
+            return DeliveryTrackingStatus.RETURNED;
         }
         if (order.getStatus() == OrderStatus.DELIVERED) {
             return DeliveryTrackingStatus.DELIVERED;
         }
-        if (order.getStatus() == OrderStatus.DISPATCHED) {
-            return DeliveryTrackingStatus.DISPATCHED;
+
+        DeliveryTrackingStatus tracking = order.getDeliveryTrackingStatus();
+        if (tracking == DeliveryTrackingStatus.ON_THE_WAY) {
+            tracking = DeliveryTrackingStatus.IN_TRANSIT;
         }
+
+        if (order.getStatus() == OrderStatus.IN_PRODUCTION) {
+            return null;
+        }
+        if (order.getStatus() == OrderStatus.PENDING_APPROVAL || order.getStatus() == OrderStatus.REJECTED) {
+            return null;
+        }
+        if (order.getStatus() == OrderStatus.APPROVED) {
+            return tracking == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH ? tracking : null;
+        }
+
+        if (order.getStatus() == OrderStatus.DISPATCHED) {
+            // If status is dispatched, don't let stale scheduled tracking override it.
+            if (tracking == null || tracking == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH) {
+                return DeliveryTrackingStatus.DISPATCHED;
+            }
+            return tracking;
+        }
+
+        if (tracking != null) {
+            return tracking;
+        }
+
         if (order.getDispatchDateTime() != null) {
             return DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH;
         }
@@ -259,6 +366,8 @@ public class DeliveryTrackingController {
                 return DeliveryTrackingStatus.ON_THE_WAY;
             case "DELIVERED":
                 return DeliveryTrackingStatus.DELIVERED;
+            case "RETURNED":
+                return DeliveryTrackingStatus.RETURNED;
             default:
                 return null;
         }
@@ -294,6 +403,7 @@ public class DeliveryTrackingController {
                 .orElseGet(() -> {
                     TransitMixer mixer = new TransitMixer();
                     mixer.setMixerNumber(mixerNumber);
+                    mixer.setCapacityM3(6.0);
                     return transitMixerRepository.save(mixer);
                 });
     }

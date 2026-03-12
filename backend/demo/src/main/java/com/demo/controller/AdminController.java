@@ -10,6 +10,7 @@ import com.demo.entity.DeliveryTrackingStatus;
 import com.demo.entity.DispatchTripRecord;
 import com.demo.entity.DispatchTripStatus;
 import com.demo.entity.Driver;
+import com.demo.entity.NotificationType;
 import com.demo.entity.Order;
 import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
@@ -24,6 +25,7 @@ import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.QualityInspectionRepository;
 import com.demo.repository.TransitMixerRepository;
 import com.demo.repository.UserRepository;
+import com.demo.service.OrderNotificationService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +69,9 @@ public class AdminController {
     @Autowired
     private QualityInspectionRepository qualityInspectionRepository;
 
+    @Autowired
+    private OrderNotificationService orderNotificationService;
+
 
     // ? 1. Get All Orders
     @GetMapping("/orders")
@@ -105,10 +110,29 @@ public class AdminController {
                 if (order.getDeliveredAt() == null) {
                     order.setDeliveredAt(LocalDateTime.now());
                 }
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+            } else if (newStatus == OrderStatus.RETURNED) {
+                order.setDeliveryTrackingStatus(DeliveryTrackingStatus.RETURNED);
+                if (order.getReturnedQuantity() == null || order.getReturnedQuantity() <= 0) {
+                    order.setReturnedQuantity(order.getQuantity());
+                }
+                if (isBlank(order.getReturnReason())) {
+                    order.setReturnReason("Returned by admin");
+                }
             } else if (newStatus == OrderStatus.DISPATCHED) {
                 order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DISPATCHED);
+            } else {
+                // Non-dispatch statuses should not keep stale delivery tracking stage.
+                order.setDeliveryTrackingStatus(null);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
             }
+            String stage = newStatus.name().replace('_', ' ');
+            order.setLatestNotification("Order status updated to " + stage);
             orderRepository.save(order);
+            orderNotificationService.logOrderUpdate(order, resolveTrackingStatus(order), order.getLatestNotification());
 
             return ResponseEntity.ok(Map.of(
                     "message", "Order status updated successfully",
@@ -120,6 +144,203 @@ public class AdminController {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Invalid status value"));
         }
+    }
+
+    @PutMapping("/orders/{orderId}/workflow-step")
+    public ResponseEntity<?> quickUpdateWorkflowStep(
+            @PathVariable String orderId,
+            @RequestParam Long adminUserId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+
+        ResponseEntity<?> adminValidation = validateAdmin(adminUserId);
+        if (adminValidation != null) {
+            return adminValidation;
+        }
+
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        String rawStep = payload == null ? null : String.valueOf(payload.getOrDefault("step", "")).trim();
+        if (rawStep == null || rawStep.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "step is required (IN_PRODUCTION, SCHEDULED, DISPATCHED, IN_TRANSIT, DELIVERED)"
+            ));
+        }
+
+        String step = rawStep.toUpperCase().replace("-", "_").replace(" ", "_");
+        LocalDateTime now = LocalDateTime.now();
+
+        switch (step) {
+            case "APPROVED":
+                order.setStatus(OrderStatus.APPROVED);
+                order.setDeliveryTrackingStatus(null);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+                order.setLatestNotification("Order approved and ready for production");
+                break;
+            case "IN_PRODUCTION":
+            case "PRODUCTION":
+                if (order.getStatus() == OrderStatus.PENDING_APPROVAL || order.getStatus() == OrderStatus.REJECTED) {
+                    order.setStatus(OrderStatus.APPROVED);
+                }
+                order.setStatus(OrderStatus.IN_PRODUCTION);
+                order.setDeliveryTrackingStatus(null);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+                if (order.getProductionDate() == null) {
+                    order.setProductionDate(now.toLocalDate());
+                }
+                if (order.getProductionSlotStart() == null) {
+                    order.setProductionSlotStart(now);
+                }
+                if (order.getProductionSlotEnd() == null || !order.getProductionSlotEnd().isAfter(order.getProductionSlotStart())) {
+                    order.setProductionSlotEnd(order.getProductionSlotStart().plusHours(2));
+                }
+                order.setLatestNotification("Order moved to production");
+                break;
+            case "SCHEDULED":
+                if (order.getStatus() == OrderStatus.PENDING_APPROVAL
+                        || order.getStatus() == OrderStatus.REJECTED
+                        || order.getStatus() == OrderStatus.DISPATCHED
+                        || order.getStatus() == OrderStatus.DELIVERED) {
+                    order.setStatus(OrderStatus.APPROVED);
+                }
+                order.setDeliveryTrackingStatus(DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+                if (order.getDispatchDateTime() == null) {
+                    order.setDispatchDateTime(now.plusHours(2));
+                }
+                if (order.getExpectedArrivalTime() == null || !order.getExpectedArrivalTime().isAfter(order.getDispatchDateTime())) {
+                    order.setExpectedArrivalTime(order.getDispatchDateTime().plusHours(2));
+                }
+                if (isBlank(order.getTripPlanning())) {
+                    order.setTripPlanning("SINGLE_TRIP");
+                }
+                if (order.getPlannedTrips() == null || order.getPlannedTrips() < 1) {
+                    order.setPlannedTrips(1);
+                }
+                if (order.getCompletedTrips() == null) {
+                    order.setCompletedTrips(0);
+                }
+                order.setLatestNotification("Order scheduled for dispatch");
+                break;
+            case "DISPATCHED":
+                if (order.getDispatchDateTime() == null) {
+                    order.setDispatchDateTime(now);
+                }
+                if (order.getExpectedArrivalTime() == null || !order.getExpectedArrivalTime().isAfter(order.getDispatchDateTime())) {
+                    order.setExpectedArrivalTime(order.getDispatchDateTime().plusHours(2));
+                }
+                order.setStatus(OrderStatus.DISPATCHED);
+                order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DISPATCHED);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+                order.setLatestNotification("Order dispatched from plant");
+                break;
+            case "IN_TRANSIT":
+            case "ON_THE_WAY":
+                if (order.getDispatchDateTime() == null) {
+                    order.setDispatchDateTime(now.minusMinutes(15));
+                }
+                if (order.getExpectedArrivalTime() == null || !order.getExpectedArrivalTime().isAfter(order.getDispatchDateTime())) {
+                    order.setExpectedArrivalTime(now.plusHours(1));
+                }
+                order.setStatus(OrderStatus.DISPATCHED);
+                order.setDeliveryTrackingStatus(DeliveryTrackingStatus.IN_TRANSIT);
+                order.setDeliveredAt(null);
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+                order.setLatestNotification("Order is in transit");
+                break;
+            case "DELIVERED":
+                order.setStatus(OrderStatus.DELIVERED);
+                order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DELIVERED);
+                if (order.getDeliveredAt() == null) {
+                    order.setDeliveredAt(now);
+                }
+                order.setReturnReason(null);
+                order.setReturnedQuantity(null);
+                if (order.getPlannedTrips() != null && order.getPlannedTrips() > 0) {
+                    order.setCompletedTrips(order.getPlannedTrips());
+                }
+                order.setLatestNotification("Order delivered successfully");
+                break;
+            case "RETURNED":
+                order.setStatus(OrderStatus.RETURNED);
+                order.setDeliveryTrackingStatus(DeliveryTrackingStatus.RETURNED);
+                if (payload != null && payload.get("returnedQuantity") != null) {
+                    order.setReturnedQuantity(parsePositiveDouble(payload.get("returnedQuantity"), order.getQuantity()));
+                } else if (order.getReturnedQuantity() == null || order.getReturnedQuantity() <= 0) {
+                    order.setReturnedQuantity(order.getQuantity());
+                }
+                if (payload != null && payload.get("returnReason") != null) {
+                    String reason = String.valueOf(payload.get("returnReason")).trim();
+                    order.setReturnReason(reason.isEmpty() ? "Returned by admin" : reason);
+                } else if (isBlank(order.getReturnReason())) {
+                    order.setReturnReason("Returned by admin");
+                }
+                order.setLatestNotification("Delivery returned: " + order.getReturnReason());
+                break;
+            default:
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "Invalid step. Use IN_PRODUCTION, SCHEDULED, DISPATCHED, IN_TRANSIT, DELIVERED, or RETURNED"
+                ));
+        }
+
+        orderRepository.save(order);
+        orderNotificationService.logOrderUpdate(order, resolveTrackingStatus(order), order.getLatestNotification());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Workflow updated to " + step);
+        response.put("orderId", order.getOrderId());
+        response.put("status", order.getStatus());
+        response.put("deliveryTrackingStatus", resolveTrackingStatus(order));
+        response.put("deliveryTrackingStatusLabel", resolveDeliveryStatusLabel(resolveTrackingStatus(order)));
+        response.put("latestNotification", order.getLatestNotification());
+        response.put("customerDashboardUpdated", true);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/orders/{orderId}/dispatch/calculate-trips")
+    public ResponseEntity<?> calculateDispatchTrips(
+            @PathVariable String orderId,
+            @RequestParam Long adminUserId,
+            @RequestParam(required = false) Double capacityM3) {
+
+        ResponseEntity<?> adminValidation = validateAdmin(adminUserId);
+        if (adminValidation != null) {
+            return adminValidation;
+        }
+
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        double effectiveCapacity = resolveTruckCapacity(order, capacityM3);
+        if (effectiveCapacity <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Truck capacity must be greater than 0"));
+        }
+
+        List<Double> tripLoads = calculateTripLoads(order.getQuantity(), effectiveCapacity);
+        List<Map<String, Object>> plan = new ArrayList<>();
+        for (int i = 0; i < tripLoads.size(); i++) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("tripNumber", i + 1);
+            row.put("quantityM3", tripLoads.get(i));
+            plan.add(row);
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("orderId", order.getOrderId());
+        response.put("orderQuantityM3", order.getQuantity());
+        response.put("capacityM3", effectiveCapacity);
+        response.put("requiredTrips", tripLoads.size());
+        response.put("tripPlan", plan);
+        return ResponseEntity.ok(response);
     }
 
     // ? 4. Get All Users (Optional Admin Feature)
@@ -168,8 +389,14 @@ public class AdminController {
 
         order.setStatus(OrderStatus.APPROVED);
         order.setApprovedAt(LocalDateTime.now());
+        order.setDeliveryTrackingStatus(null);
+        order.setDeliveredAt(null);
+        order.setReturnReason(null);
+        order.setReturnedQuantity(null);
+        order.setLatestNotification("Order approved");
 
         orderRepository.save(order);
+        orderNotificationService.createNotification(order, NotificationType.ORDER_APPROVED);
 
         return ResponseEntity.ok("Order Approved");
     }
@@ -180,7 +407,13 @@ public class AdminController {
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
         order.setStatus(OrderStatus.REJECTED);
+        order.setDeliveryTrackingStatus(null);
+        order.setDeliveredAt(null);
+        order.setReturnReason(null);
+        order.setReturnedQuantity(null);
+        order.setLatestNotification("Order rejected");
         orderRepository.save(order);
+        orderNotificationService.logOrderUpdate(order, resolveTrackingStatus(order), order.getLatestNotification());
 
         return ResponseEntity.ok("Order Rejected");
     }
@@ -259,6 +492,10 @@ public class AdminController {
         order.setProductionSlotStart(request.getProductionSlotStart());
         order.setProductionSlotEnd(request.getProductionSlotEnd());
         order.setStatus(OrderStatus.IN_PRODUCTION);
+        order.setDeliveryTrackingStatus(null);
+        order.setDeliveredAt(null);
+        order.setReturnReason(null);
+        order.setReturnedQuantity(null);
         order.setLatestNotification("Production schedule updated by admin");
 
         OrderAssignment assignment = getOrCreateAssignment(order);
@@ -266,6 +503,7 @@ public class AdminController {
         assignment.setPriorityLevel(request.getPriorityLevel());
         orderAssignmentRepository.save(assignment);
         orderRepository.save(order);
+        orderNotificationService.createNotification(order, NotificationType.IN_PRODUCTION);
 
         return ResponseEntity.ok(Map.of(
                 "message", "Production scheduled successfully",
@@ -306,24 +544,63 @@ public class AdminController {
             ));
         }
 
-        String tripPlanning = request.getTripPlanning().trim().toUpperCase();
-        if (!"SINGLE_TRIP".equals(tripPlanning) && !"MULTIPLE_TRIPS".equals(tripPlanning)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Trip planning must be SINGLE_TRIP or MULTIPLE_TRIPS"));
-        }
-
-        int plannedTrips = request.getPlannedTrips() == null
-                ? ("MULTIPLE_TRIPS".equals(tripPlanning) ? 2 : 1)
-                : request.getPlannedTrips();
-        if (plannedTrips < 1) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Planned trips must be at least 1"));
-        }
-        if ("SINGLE_TRIP".equals(tripPlanning)) {
-            plannedTrips = 1;
-        } else if (plannedTrips < 2) {
+        OrderAssignment assignment = orderAssignmentRepository.findByOrder_Id(order.getId()).orElse(null);
+        if (assignment == null || assignment.getTransitMixer() == null || assignment.getDriver() == null) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "For MULTIPLE_TRIPS, planned trips must be at least 2"
+                    "message", "Assign transit mixer and driver before dispatch scheduling"
             ));
         }
+        String mixerNumber = assignment.getTransitMixer().getMixerNumber();
+        String driverName = assignment.getDriver().getDriverName();
+        if (isBlank(mixerNumber) || isBlank(driverName)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Assign transit mixer and driver before dispatch scheduling"
+            ));
+        }
+
+        LocalDateTime requestedDispatchTime = request.getDispatchDateTime();
+        LocalDateTime requestedEta = request.getExpectedArrivalTime();
+        for (OrderAssignment otherAssignment : orderAssignmentRepository.findAll()) {
+            if (otherAssignment.getOrder() == null || Objects.equals(otherAssignment.getOrder().getId(), order.getId())) {
+                continue;
+            }
+            Order otherOrder = otherAssignment.getOrder();
+            if (otherOrder.getDispatchDateTime() == null || otherOrder.getExpectedArrivalTime() == null) {
+                continue;
+            }
+            if (!hasTimeOverlap(requestedDispatchTime, requestedEta, otherOrder.getDispatchDateTime(), otherOrder.getExpectedArrivalTime())) {
+                continue;
+            }
+
+            boolean sameMixer = otherAssignment.getTransitMixer() != null
+                    && !isBlank(otherAssignment.getTransitMixer().getMixerNumber())
+                    && otherAssignment.getTransitMixer().getMixerNumber().trim().equalsIgnoreCase(mixerNumber.trim());
+            if (sameMixer) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "Transit mixer already allocated in this dispatch window",
+                        "conflictOrderId", otherOrder.getOrderId()
+                ));
+            }
+
+            boolean sameDriver = otherAssignment.getDriver() != null
+                    && !isBlank(otherAssignment.getDriver().getDriverName())
+                    && otherAssignment.getDriver().getDriverName().trim().equalsIgnoreCase(driverName.trim());
+            if (sameDriver) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "Driver already allocated in this dispatch window",
+                        "conflictOrderId", otherOrder.getOrderId()
+                ));
+            }
+        }
+
+        double capacityM3 = resolveTruckCapacity(order, request.getTruckCapacityM3());
+        if (capacityM3 <= 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Truck capacity must be greater than 0"));
+        }
+
+        List<Double> tripLoads = calculateTripLoads(order.getQuantity(), capacityM3);
+        int plannedTrips = tripLoads.size();
+        String tripPlanning = plannedTrips > 1 ? "MULTIPLE_TRIPS" : "SINGLE_TRIP";
 
         order.setDispatchDateTime(request.getDispatchDateTime());
         order.setTripPlanning(tripPlanning);
@@ -336,16 +613,69 @@ public class AdminController {
         if (order.getTotalFuelUsedLiters() == null) {
             order.setTotalFuelUsedLiters(0.0);
         }
+        // Dispatch action should move the order to DISPATCHED so admin/customer dashboards stay in sync.
         order.setStatus(OrderStatus.DISPATCHED);
-        order.setDeliveryTrackingStatus(DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH);
-        order.setLatestNotification("Dispatch scheduled successfully");
+        order.setDeliveryTrackingStatus(DeliveryTrackingStatus.DISPATCHED);
+        order.setDeliveredAt(null);
+        order.setReturnReason(null);
+        order.setReturnedQuantity(null);
+        order.setLatestNotification("Order dispatched from plant");
         orderRepository.save(order);
+
+        mixerNumber = assignment.getTransitMixer() != null ? assignment.getTransitMixer().getMixerNumber() : null;
+        driverName = assignment.getDriver() != null ? assignment.getDriver().getDriverName() : null;
+        int intervalMinutes = request.getDispatchIntervalMinutes() != null && request.getDispatchIntervalMinutes() > 0
+                ? request.getDispatchIntervalMinutes()
+                : 60;
+        int travelMinutes = request.getEstimatedTravelMinutes() != null && request.getEstimatedTravelMinutes() > 0
+                ? request.getEstimatedTravelMinutes()
+                : 90;
+
+        List<DispatchTripRecord> existingTrips = dispatchTripRecordRepository.findByOrder_IdOrderByTripNumberAsc(order.getId());
+        Map<Integer, DispatchTripRecord> existingByTrip = new HashMap<>();
+        for (DispatchTripRecord trip : existingTrips) {
+            if (trip.getTripNumber() != null) {
+                existingByTrip.put(trip.getTripNumber(), trip);
+            }
+        }
+
+        for (int i = 0; i < plannedTrips; i++) {
+            int tripNumber = i + 1;
+            DispatchTripRecord trip = existingByTrip.getOrDefault(tripNumber, new DispatchTripRecord());
+            LocalDateTime dispatchTime = request.getDispatchDateTime().plusMinutes((long) intervalMinutes * i);
+            LocalDateTime eta = dispatchTime.plusMinutes(travelMinutes);
+
+            trip.setOrder(order);
+            trip.setTripNumber(tripNumber);
+            trip.setStatus(DispatchTripStatus.SCHEDULED);
+            trip.setTripQuantityM3(tripLoads.get(i));
+            trip.setShift(resolveShiftByDispatchTime(dispatchTime));
+            trip.setScheduledDispatchTime(dispatchTime);
+            trip.setEstimatedDeliveryTime(eta);
+            if (!isBlank(mixerNumber)) {
+                trip.setTransitMixerNumber(mixerNumber);
+            }
+            if (!isBlank(driverName)) {
+                trip.setDriverName(driverName);
+            }
+            dispatchTripRecordRepository.save(trip);
+        }
+
+        for (DispatchTripRecord trip : existingTrips) {
+            if (trip.getTripNumber() != null && trip.getTripNumber() > plannedTrips) {
+                dispatchTripRecordRepository.delete(trip);
+            }
+        }
+
+        orderNotificationService.createNotification(order, NotificationType.DISPATCH_SCHEDULED);
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Dispatch scheduled successfully");
         response.put("orderId", order.getOrderId());
         response.put("tripPlanning", order.getTripPlanning());
         response.put("plannedTrips", order.getPlannedTrips());
+        response.put("capacityM3", capacityM3);
+        response.put("tripLoads", tripLoads);
         return ResponseEntity.ok(response);
     }
 
@@ -379,18 +709,16 @@ public class AdminController {
             ));
         }
 
-        if (order.getDispatchDateTime() == null || order.getExpectedArrivalTime() == null) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "message", "Dispatch time and ETA must be set before vehicle assignment"
-            ));
-        }
-
         OrderAssignment current = getOrCreateAssignment(order);
         LocalDateTime start = order.getDispatchDateTime();
         LocalDateTime end = order.getExpectedArrivalTime();
+        boolean hasDispatchWindow = start != null && end != null;
 
         for (OrderAssignment assignment : orderAssignmentRepository.findAll()) {
             if (assignment.getOrder() == null || Objects.equals(assignment.getOrder().getId(), order.getId())) {
+                continue;
+            }
+            if (!hasDispatchWindow) {
                 continue;
             }
             Order otherOrder = assignment.getOrder();
@@ -418,6 +746,10 @@ public class AdminController {
 
         Driver driver = upsertDriver(request.getDriverName().trim(), request.getDriverShift());
         TransitMixer mixer = upsertMixer(request.getTransitMixerNumber().trim());
+        if (request.getTransitMixerCapacityM3() != null && request.getTransitMixerCapacityM3() > 0) {
+            mixer.setCapacityM3(request.getTransitMixerCapacityM3());
+            mixer = transitMixerRepository.save(mixer);
+        }
         current.setDriver(driver);
         current.setTransitMixer(mixer);
         if (!isBlank(request.getBackupDriverName())) {
@@ -430,6 +762,7 @@ public class AdminController {
 
         order.setLatestNotification("Vehicle and driver assigned successfully");
         orderRepository.save(order);
+        orderNotificationService.createNotification(order, NotificationType.VEHICLE_ASSIGNED);
 
         return ResponseEntity.ok(Map.of(
                 "message", "Vehicle and driver assigned successfully",
@@ -633,7 +966,7 @@ public class AdminController {
         DeliveryTrackingStatus deliveryStatus = parseDeliveryStatus(request.getDeliveryStatus());
         if (deliveryStatus == null) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "Invalid delivery status. Use Scheduled, Dispatched, In Transit, or Delivered"
+                    "message", "Invalid delivery status. Use Scheduled, Dispatched, In Transit, Delivered, or Returned"
             ));
         }
 
@@ -655,13 +988,27 @@ public class AdminController {
             if (order.getPlannedTrips() != null && order.getPlannedTrips() > 0) {
                 order.setCompletedTrips(order.getPlannedTrips());
             }
+            order.setReturnReason(null);
+            order.setReturnedQuantity(null);
             if (isBlank(order.getLatestNotification())) {
                 order.setLatestNotification("Concrete delivered successfully");
+            }
+        } else if (deliveryStatus == DeliveryTrackingStatus.RETURNED) {
+            order.setStatus(OrderStatus.RETURNED);
+            order.setDeliveredAt(null);
+            order.setReturnReason(isBlank(request.getReturnReason()) ? "Returned from site" : request.getReturnReason().trim());
+            order.setReturnedQuantity(request.getReturnedQuantity() != null && request.getReturnedQuantity() > 0
+                    ? request.getReturnedQuantity()
+                    : order.getQuantity());
+            if (isBlank(order.getLatestNotification())) {
+                order.setLatestNotification("Delivery returned: " + order.getReturnReason());
             }
         } else if (deliveryStatus == DeliveryTrackingStatus.DISPATCHED
                 || deliveryStatus == DeliveryTrackingStatus.IN_TRANSIT
                 || deliveryStatus == DeliveryTrackingStatus.ON_THE_WAY) {
             order.setStatus(OrderStatus.DISPATCHED);
+            order.setReturnReason(null);
+            order.setReturnedQuantity(null);
         }
 
         if (isBlank(order.getLatestNotification())) {
@@ -669,6 +1016,13 @@ public class AdminController {
         }
 
         orderRepository.save(order);
+        if (deliveryStatus == DeliveryTrackingStatus.DELIVERED) {
+            orderNotificationService.createNotification(order, NotificationType.ORDER_DELIVERED);
+        } else if (deliveryStatus == DeliveryTrackingStatus.RETURNED) {
+            orderNotificationService.createNotification(order, NotificationType.ORDER_RETURNED);
+        } else {
+            orderNotificationService.createNotification(order, NotificationType.DELIVERY_STATUS_UPDATED);
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Delivery status updated successfully");
@@ -713,7 +1067,7 @@ public class AdminController {
         DispatchTripStatus tripStatus = parseTripStatus(request.getStatus());
         if (tripStatus == null) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "message", "Invalid trip status. Use SCHEDULED, DISPATCHED, IN_TRANSIT, or DELIVERED"
+                    "message", "Invalid trip status. Use SCHEDULED, DISPATCHED, IN_TRANSIT, DELIVERED, or RETURNED"
             ));
         }
 
@@ -727,8 +1081,24 @@ public class AdminController {
         tripRecord.setScheduledDispatchTime(request.getScheduledDispatchTime());
         tripRecord.setActualDispatchTime(request.getActualDispatchTime());
         tripRecord.setDeliveredTime(request.getDeliveredTime());
+        tripRecord.setEstimatedDeliveryTime(request.getEstimatedDeliveryTime());
+        tripRecord.setShift(request.getShift());
+        tripRecord.setTripQuantityM3(request.getTripQuantityM3());
+        if (isBlank(tripRecord.getShift())) {
+            tripRecord.setShift(resolveShiftByDispatchTime(tripRecord.getScheduledDispatchTime()));
+        }
+        if (tripRecord.getTripQuantityM3() == null || tripRecord.getTripQuantityM3() <= 0) {
+            if (order.getPlannedTrips() != null && order.getPlannedTrips() > 0) {
+                double perTrip = Math.round((order.getQuantity() / order.getPlannedTrips()) * 100.0) / 100.0;
+                tripRecord.setTripQuantityM3(perTrip);
+            } else {
+                tripRecord.setTripQuantityM3(order.getQuantity());
+            }
+        }
         tripRecord.setFuelUsedLiters(request.getFuelUsedLiters());
         tripRecord.setRemarks(request.getRemarks());
+        tripRecord.setReturnReason(request.getReturnReason());
+        tripRecord.setReturnedQuantity(request.getReturnedQuantity());
 
         OrderAssignment assignment = getOrCreateAssignment(order);
         if (!isBlank(request.getTransitMixerNumber())) {
@@ -745,6 +1115,19 @@ public class AdminController {
 
         if (tripStatus == DispatchTripStatus.DELIVERED && tripRecord.getDeliveredTime() == null) {
             tripRecord.setDeliveredTime(LocalDateTime.now());
+        }
+        if (tripStatus == DispatchTripStatus.DELIVERED) {
+            tripRecord.setReturnReason(null);
+            tripRecord.setReturnedQuantity(null);
+        }
+        if (tripStatus == DispatchTripStatus.RETURNED) {
+            tripRecord.setReturnReason(isBlank(request.getReturnReason()) ? "Returned from site" : request.getReturnReason().trim());
+            tripRecord.setReturnedQuantity(request.getReturnedQuantity() != null && request.getReturnedQuantity() > 0
+                    ? request.getReturnedQuantity()
+                    : (tripRecord.getTripQuantityM3() != null && tripRecord.getTripQuantityM3() > 0
+                        ? tripRecord.getTripQuantityM3()
+                        : order.getQuantity()));
+            tripRecord.setDeliveredTime(null);
         }
 
         dispatchTripRecordRepository.save(tripRecord);
@@ -774,12 +1157,28 @@ public class AdminController {
                 order.setDeliveryTrackingStatus(DeliveryTrackingStatus.ON_THE_WAY);
                 order.setLatestNotification("Trip " + request.getTripNumber() + " delivered");
             }
+        } else if (tripStatus == DispatchTripStatus.RETURNED) {
+            order.setStatus(OrderStatus.RETURNED);
+            order.setDeliveryTrackingStatus(DeliveryTrackingStatus.RETURNED);
+            order.setReturnReason(tripRecord.getReturnReason());
+            order.setReturnedQuantity(tripRecord.getReturnedQuantity());
+            order.setDeliveredAt(null);
+            order.setLatestNotification("Trip " + request.getTripNumber() + " returned");
         } else {
             order.setDeliveryTrackingStatus(DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH);
             order.setLatestNotification("Trip " + request.getTripNumber() + " scheduled");
         }
 
         orderRepository.save(order);
+        if (tripStatus == DispatchTripStatus.DELIVERED && order.getStatus() == OrderStatus.DELIVERED) {
+            orderNotificationService.createNotification(order, NotificationType.ORDER_DELIVERED);
+        } else if (tripStatus == DispatchTripStatus.RETURNED) {
+            orderNotificationService.createNotification(order, NotificationType.ORDER_RETURNED);
+        } else if (tripStatus == DispatchTripStatus.SCHEDULED) {
+            orderNotificationService.createNotification(order, NotificationType.DISPATCH_SCHEDULED);
+        } else {
+            orderNotificationService.createNotification(order, NotificationType.DELIVERY_STATUS_UPDATED);
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Trip record saved successfully");
@@ -858,6 +1257,62 @@ public class AdminController {
         row.put("busyTo", busyTo);
     }
 
+    private double resolveTruckCapacity(Order order, Double requestedCapacity) {
+        if (requestedCapacity != null && requestedCapacity > 0) {
+            return requestedCapacity;
+        }
+
+        OrderAssignment assignment = orderAssignmentRepository.findByOrder_Id(order.getId()).orElse(null);
+        if (assignment != null && assignment.getTransitMixer() != null && assignment.getTransitMixer().getCapacityM3() != null
+                && assignment.getTransitMixer().getCapacityM3() > 0) {
+            return assignment.getTransitMixer().getCapacityM3();
+        }
+
+        return 6.0;
+    }
+
+    private List<Double> calculateTripLoads(double totalQuantityM3, double capacityM3) {
+        List<Double> loads = new ArrayList<>();
+        if (totalQuantityM3 <= 0 || capacityM3 <= 0) {
+            return loads;
+        }
+
+        double remaining = totalQuantityM3;
+        while (remaining > 0) {
+            double tripQty = Math.min(capacityM3, remaining);
+            tripQty = Math.round(tripQty * 100.0) / 100.0;
+            loads.add(tripQty);
+            remaining = Math.round((remaining - tripQty) * 100.0) / 100.0;
+        }
+        return loads;
+    }
+
+    private String resolveShiftByDispatchTime(LocalDateTime dispatchTime) {
+        if (dispatchTime == null) {
+            return "MORNING";
+        }
+        int hour = dispatchTime.getHour();
+        if (hour >= 6 && hour < 15) {
+            return "MORNING";
+        }
+        return "EVENING";
+    }
+
+    private Double parsePositiveDouble(Object value, Double fallbackValue) {
+        if (value == null) {
+            return fallbackValue;
+        }
+        try {
+            double parsed = Double.parseDouble(String.valueOf(value));
+            if (parsed > 0) {
+                return parsed;
+            }
+            return fallbackValue;
+        } catch (NumberFormatException ignored) {
+            return fallbackValue;
+        }
+    }
+
     private DispatchTripStatus parseTripStatus(String rawStatus) {
         if (isBlank(rawStatus)) {
             return DispatchTripStatus.SCHEDULED;
@@ -874,6 +1329,8 @@ public class AdminController {
                 return DispatchTripStatus.IN_TRANSIT;
             case "DELIVERED":
                 return DispatchTripStatus.DELIVERED;
+            case "RETURNED":
+                return DispatchTripStatus.RETURNED;
             default:
                 return null;
         }
@@ -896,24 +1353,48 @@ public class AdminController {
                 return DeliveryTrackingStatus.ON_THE_WAY;
             case "DELIVERED":
                 return DeliveryTrackingStatus.DELIVERED;
+            case "RETURNED":
+                return DeliveryTrackingStatus.RETURNED;
             default:
                 return null;
         }
     }
 
     private DeliveryTrackingStatus resolveTrackingStatus(Order order) {
-        if (order.getDeliveryTrackingStatus() != null) {
-            if (order.getDeliveryTrackingStatus() == DeliveryTrackingStatus.ON_THE_WAY) {
-                return DeliveryTrackingStatus.IN_TRANSIT;
-            }
-            return order.getDeliveryTrackingStatus();
+        if (order.getStatus() == OrderStatus.RETURNED) {
+            return DeliveryTrackingStatus.RETURNED;
         }
         if (order.getStatus() == OrderStatus.DELIVERED) {
             return DeliveryTrackingStatus.DELIVERED;
         }
-        if (order.getStatus() == OrderStatus.DISPATCHED) {
-            return DeliveryTrackingStatus.DISPATCHED;
+
+        DeliveryTrackingStatus tracking = order.getDeliveryTrackingStatus();
+        if (tracking == DeliveryTrackingStatus.ON_THE_WAY) {
+            tracking = DeliveryTrackingStatus.IN_TRANSIT;
         }
+
+        if (order.getStatus() == OrderStatus.IN_PRODUCTION) {
+            return null;
+        }
+        if (order.getStatus() == OrderStatus.PENDING_APPROVAL || order.getStatus() == OrderStatus.REJECTED) {
+            return null;
+        }
+        if (order.getStatus() == OrderStatus.APPROVED) {
+            return tracking == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH ? tracking : null;
+        }
+
+        if (order.getStatus() == OrderStatus.DISPATCHED) {
+            // Ensure stale "SCHEDULED" tracking never overrides a dispatched order.
+            if (tracking == null || tracking == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH) {
+                return DeliveryTrackingStatus.DISPATCHED;
+            }
+            return tracking;
+        }
+
+        if (tracking != null) {
+            return tracking;
+        }
+
         if (order.getDispatchDateTime() != null) {
             return DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH;
         }
@@ -934,6 +1415,8 @@ public class AdminController {
                 return "IN_TRANSIT";
             case DELIVERED:
                 return "DELIVERED";
+            case RETURNED:
+                return "RETURNED";
             default:
                 return status.name();
         }
@@ -982,11 +1465,16 @@ public class AdminController {
         row.put("id", trip.getId());
         row.put("tripNumber", trip.getTripNumber());
         row.put("status", trip.getStatus());
+        row.put("shift", trip.getShift());
+        row.put("tripQuantityM3", trip.getTripQuantityM3());
         row.put("scheduledDispatchTime", trip.getScheduledDispatchTime());
         row.put("actualDispatchTime", trip.getActualDispatchTime());
+        row.put("estimatedDeliveryTime", trip.getEstimatedDeliveryTime());
         row.put("deliveredTime", trip.getDeliveredTime());
         row.put("fuelUsedLiters", trip.getFuelUsedLiters());
         row.put("remarks", trip.getRemarks());
+        row.put("returnReason", trip.getReturnReason());
+        row.put("returnedQuantity", trip.getReturnedQuantity());
         row.put("transitMixerNumber", trip.getTransitMixerNumber());
         row.put("driverName", trip.getDriverName());
         return row;
@@ -1032,6 +1520,7 @@ public class AdminController {
                 .orElseGet(() -> {
                     TransitMixer mixer = new TransitMixer();
                     mixer.setMixerNumber(mixerNumber);
+                    mixer.setCapacityM3(6.0);
                     return transitMixerRepository.save(mixer);
                 });
     }
@@ -1068,6 +1557,8 @@ public class AdminController {
         row.put("liveLongitude", order.getLiveLongitude());
         row.put("deliveredAt", order.getDeliveredAt());
         row.put("deliveryConfirmationDetails", order.getDeliveryConfirmationDetails());
+        row.put("returnReason", order.getReturnReason());
+        row.put("returnedQuantity", order.getReturnedQuantity());
         row.put("userId", order.getUser() != null ? order.getUser().getId() : null);
         row.put("customerName", order.getUser() != null ? order.getUser().getName() : null);
         row.put("customerEmail", order.getUser() != null ? order.getUser().getEmail() : null);
@@ -1079,6 +1570,8 @@ public class AdminController {
             row.put("priorityLevel", assignment.getPriorityLevel());
             row.put("transitMixerNumber",
                     assignment.getTransitMixer() != null ? assignment.getTransitMixer().getMixerNumber() : null);
+            row.put("transitMixerCapacityM3",
+                    assignment.getTransitMixer() != null ? assignment.getTransitMixer().getCapacityM3() : null);
             row.put("driverName",
                     assignment.getDriver() != null ? assignment.getDriver().getDriverName() : null);
             row.put("driverShift",
@@ -1091,6 +1584,7 @@ public class AdminController {
             row.put("plantAllocation", null);
             row.put("priorityLevel", null);
             row.put("transitMixerNumber", null);
+            row.put("transitMixerCapacityM3", null);
             row.put("driverName", null);
             row.put("driverShift", null);
             row.put("backupTransitMixerNumber", null);

@@ -11,6 +11,7 @@ import BillingPayment from "./Pages/customer/BillingPayment";
 import QualityAccess from "./Pages/customer/QualityAccess";
 import OrderSuccess from "./Pages/customer/OrderSuccess";
 import CheckoutPayment from "./Pages/customer/CheckoutPayment";
+import Notifications from "./Pages/customer/Notifications";
 import AdminDashboard from "./Pages/admin/AdminDashboard";
 import AdminOrders from "./Pages/admin/AdminOrders";
 import AdminUsers from "./Pages/admin/AdminUsers";
@@ -58,6 +59,7 @@ function App() {
           <Route path="/billing-payment" element={<BillingPayment />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/customize-profile" element={<CustomizeProfile />} />
         </Route>
 

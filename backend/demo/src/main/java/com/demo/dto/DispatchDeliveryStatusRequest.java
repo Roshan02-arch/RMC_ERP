@@ -9,6 +9,8 @@ public class DispatchDeliveryStatusRequest {
     private String delayUpdateMessage;
     private LocalDateTime deliveredAt;
     private String deliveryConfirmationDetails;
+    private String returnReason;
+    private Double returnedQuantity;
 
     public String getDeliveryStatus() {
         return deliveryStatus;
@@ -48,5 +50,21 @@ public class DispatchDeliveryStatusRequest {
 
     public void setDeliveryConfirmationDetails(String deliveryConfirmationDetails) {
         this.deliveryConfirmationDetails = deliveryConfirmationDetails;
+    }
+
+    public String getReturnReason() {
+        return returnReason;
+    }
+
+    public void setReturnReason(String returnReason) {
+        this.returnReason = returnReason;
+    }
+
+    public Double getReturnedQuantity() {
+        return returnedQuantity;
+    }
+
+    public void setReturnedQuantity(Double returnedQuantity) {
+        this.returnedQuantity = returnedQuantity;
     }
 }

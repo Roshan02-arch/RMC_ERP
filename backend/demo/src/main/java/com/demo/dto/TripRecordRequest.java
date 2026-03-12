@@ -13,6 +13,11 @@ public class TripRecordRequest {
     private String remarks;
     private String transitMixerNumber;
     private String driverName;
+    private String shift;
+    private Double tripQuantityM3;
+    private LocalDateTime estimatedDeliveryTime;
+    private String returnReason;
+    private Double returnedQuantity;
 
     public Integer getTripNumber() {
         return tripNumber;
@@ -84,5 +89,45 @@ public class TripRecordRequest {
 
     public void setDriverName(String driverName) {
         this.driverName = driverName;
+    }
+
+    public String getShift() {
+        return shift;
+    }
+
+    public void setShift(String shift) {
+        this.shift = shift;
+    }
+
+    public Double getTripQuantityM3() {
+        return tripQuantityM3;
+    }
+
+    public void setTripQuantityM3(Double tripQuantityM3) {
+        this.tripQuantityM3 = tripQuantityM3;
+    }
+
+    public LocalDateTime getEstimatedDeliveryTime() {
+        return estimatedDeliveryTime;
+    }
+
+    public void setEstimatedDeliveryTime(LocalDateTime estimatedDeliveryTime) {
+        this.estimatedDeliveryTime = estimatedDeliveryTime;
+    }
+
+    public String getReturnReason() {
+        return returnReason;
+    }
+
+    public void setReturnReason(String returnReason) {
+        this.returnReason = returnReason;
+    }
+
+    public Double getReturnedQuantity() {
+        return returnedQuantity;
+    }
+
+    public void setReturnedQuantity(Double returnedQuantity) {
+        this.returnedQuantity = returnedQuantity;
     }
 }

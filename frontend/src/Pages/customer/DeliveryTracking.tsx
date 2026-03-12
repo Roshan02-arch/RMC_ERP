@@ -28,6 +28,18 @@ type TrackingView = {
   gpsAvailable?: boolean;
   liveLatitude?: number;
   liveLongitude?: number;
+  tripDetails?: Array<{
+    tripNumber?: number;
+    status?: string;
+    shift?: string;
+    tripQuantityM3?: number;
+    transitMixerNumber?: string;
+    driverName?: string;
+    dispatchTime?: string;
+    estimatedDeliveryTime?: string;
+    returnReason?: string;
+    returnedQuantity?: number;
+  }>;
 };
 
 type RawMaterialOrder = {
@@ -52,6 +64,7 @@ const normalizeDeliveryStatus = (value?: string) => {
   if (!raw) return "PENDING_APPROVAL";
   if (raw === "SCHEDULED_FOR_DISPATCH" || raw === "SCHEDULED") return "SCHEDULED";
   if (raw === "ON_THE_WAY" || raw === "IN_TRANSIT") return "IN_TRANSIT";
+  if (raw === "RETURNED") return "RETURNED";
   return raw;
 };
 
@@ -167,6 +180,7 @@ const DeliveryTracking = () => {
           gpsAvailable: Boolean(realtimeInfo?.gpsAvailable),
           liveLatitude: typeof liveLocation?.latitude === "number" ? liveLocation.latitude : undefined,
           liveLongitude: typeof liveLocation?.longitude === "number" ? liveLocation.longitude : undefined,
+          tripDetails: Array.isArray(data?.tripDetails) ? data.tripDetails : [],
         });
         setLastGpsSyncAt(new Date());
       } catch (error) {
@@ -201,6 +215,7 @@ const DeliveryTracking = () => {
   const isDispatched = ["DISPATCHED", "IN_TRANSIT", "DELIVERED"].includes(normalizedStatus);
   const isInTransit = ["IN_TRANSIT", "DELIVERED"].includes(normalizedStatus);
   const isDelivered = normalizedStatus === "DELIVERED";
+  const isReturned = normalizedStatus === "RETURNED";
   const hasLiveLocation = typeof trackingView?.liveLatitude === "number" && typeof trackingView?.liveLongitude === "number";
   const mapsViewUrl = hasLiveLocation
     ? `https://www.google.com/maps?q=${trackingView.liveLatitude},${trackingView.liveLongitude}`
@@ -269,11 +284,12 @@ const DeliveryTracking = () => {
 
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Real-Time Tracking</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isScheduled)}`}>Scheduled for Dispatch</div>
                 <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isDispatched)}`}>Dispatched</div>
                 <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isInTransit)}`}>In Transit</div>
                 <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isDelivered)}`}>Delivered</div>
+                <div className={`border rounded-xl p-3 text-center text-xs font-semibold ${stageClass(isReturned)}`}>Returned</div>
               </div>
               {selectedOrder && hasLiveLocation ? (
                 <div className="mt-4 space-y-3">
@@ -326,10 +342,42 @@ const DeliveryTracking = () => {
               </p>
             </div>
 
+            {selectedOrder && trackingView?.tripDetails && trackingView.tripDetails.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-md p-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Trip Details</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-600 uppercase text-xs">
+                        <th className="px-3 py-2 text-left">Trip</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                        <th className="px-3 py-2 text-left">Shift</th>
+                        <th className="px-3 py-2 text-left">Qty (m3)</th>
+                        <th className="px-3 py-2 text-left">Truck / Driver</th>
+                        <th className="px-3 py-2 text-left">Dispatch / ETA</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {trackingView.tripDetails.map((trip, idx) => (
+                        <tr key={`${trip.tripNumber || idx}-${idx}`}>
+                          <td className="px-3 py-2">{trip.tripNumber || "-"}</td>
+                          <td className="px-3 py-2">{toStatusLabel(normalizeDeliveryStatus(trip.status))}</td>
+                          <td className="px-3 py-2">{trip.shift || "-"}</td>
+                          <td className="px-3 py-2">{trip.tripQuantityM3 ?? "-"}</td>
+                          <td className="px-3 py-2">{trip.transitMixerNumber || "-"} / {trip.driverName || "-"}</td>
+                          <td className="px-3 py-2">{trip.dispatchTime || "-"}<br /><span className="text-xs text-gray-500">ETA: {trip.estimatedDeliveryTime || "-"}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Delivery Confirmation</h2>
               <p className="text-sm text-gray-700">
-                <span className="font-semibold">Delivery Status:</span> {isDelivered ? "Delivered" : "Pending Delivery"}
+                <span className="font-semibold">Delivery Status:</span> {isReturned ? "Returned" : isDelivered ? "Delivered" : "Pending Delivery"}
               </p>
               <p className="text-sm text-gray-700 mt-2">
                 <span className="font-semibold">Confirmation:</span>{" "}

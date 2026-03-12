@@ -12,6 +12,7 @@ public class TransitMixer {
     private Long id;
 
     private String mixerNumber;
+    private Double capacityM3;
 
     @OneToMany(mappedBy = "transitMixer")
     private List<OrderAssignment> assignments;
@@ -32,6 +33,14 @@ public class TransitMixer {
 
     public void setMixerNumber(String mixerNumber) {
         this.mixerNumber = mixerNumber;
+    }
+
+    public Double getCapacityM3() {
+        return capacityM3;
+    }
+
+    public void setCapacityM3(Double capacityM3) {
+        this.capacityM3 = capacityM3;
     }
 
     public List<OrderAssignment> getAssignments() {

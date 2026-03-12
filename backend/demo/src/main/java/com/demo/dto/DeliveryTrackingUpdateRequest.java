@@ -16,6 +16,8 @@ public class DeliveryTrackingUpdateRequest {
     private String delayUpdateMessage;
     private String deliveryConfirmationDetails;
     private LocalDateTime deliveredAt;
+    private String returnReason;
+    private Double returnedQuantity;
 
     public String getDeliveryStatus() {
         return deliveryStatus;
@@ -111,5 +113,21 @@ public class DeliveryTrackingUpdateRequest {
 
     public void setDeliveredAt(LocalDateTime deliveredAt) {
         this.deliveredAt = deliveredAt;
+    }
+
+    public String getReturnReason() {
+        return returnReason;
+    }
+
+    public void setReturnReason(String returnReason) {
+        this.returnReason = returnReason;
+    }
+
+    public Double getReturnedQuantity() {
+        return returnedQuantity;
+    }
+
+    public void setReturnedQuantity(Double returnedQuantity) {
+        this.returnedQuantity = returnedQuantity;
     }
 }

@@ -10,6 +10,22 @@ interface Order {
   quantity: number;
   status: string;
   deliveryTrackingStatus?: string;
+  deliveryTrackingStatusLabel?: string;
+  dispatchDateTime?: string;
+  expectedArrivalTime?: string;
+  transitMixerNumber?: string;
+  driverName?: string;
+  driverShift?: string;
+  tripDetails?: Array<{
+    tripNumber?: number;
+    status?: string;
+    shift?: string;
+    tripQuantityM3?: number;
+    dispatchTime?: string;
+    estimatedDeliveryTime?: string;
+    transitMixerNumber?: string;
+    driverName?: string;
+  }>;
 }
 
 interface QualityStatus {
@@ -20,11 +36,21 @@ interface QualityStatus {
 }
 
 const getDashboardStatus = (order: Order) => {
+  const status = String(order.status || "").trim().toUpperCase();
+  if (status === "IN_PRODUCTION") return "IN_PRODUCTION";
+  if (status === "PENDING_APPROVAL") return "PENDING_APPROVAL";
+  if (status === "REJECTED") return "REJECTED";
+
+  const trackingLabel = String(order.deliveryTrackingStatusLabel || "").trim().toUpperCase();
+  if (trackingLabel === "SCHEDULED") return "SCHEDULED";
+  if (trackingLabel === "IN_TRANSIT") return "IN_TRANSIT";
+  if (trackingLabel) return trackingLabel;
+
   const tracking = String(order.deliveryTrackingStatus || "").trim().toUpperCase();
   if (tracking === "SCHEDULED_FOR_DISPATCH") return "SCHEDULED";
   if (tracking === "ON_THE_WAY") return "IN_TRANSIT";
   if (tracking) return tracking;
-  return String(order.status || "").trim().toUpperCase();
+  return status;
 };
 
 const Dashboard = () => {
@@ -46,25 +72,41 @@ const Dashboard = () => {
       return;
     }
 
-    fetch(`http://localhost:8080/api/orders/my-orders/${userId}`)
-      .then((res) => {
-        if (!res.ok) {
+    let disposed = false;
+
+    const fetchDashboardData = async () => {
+      try {
+        const ts = Date.now();
+        const [ordersRes, qualityRes] = await Promise.all([
+          fetch(`http://localhost:8080/api/orders/my-orders/${userId}?t=${ts}`, { cache: "no-store" }),
+          fetch(`http://localhost:8080/api/quality/my-orders/${userId}?t=${ts}`, { cache: "no-store" }),
+        ]);
+
+        if (!ordersRes.ok) {
           throw new Error("Failed to fetch orders");
         }
-        return res.json();
-      })
-      .then((data) => setOrders(Array.isArray(data) ? data : []))
-      .catch((err) => console.error("Fetch error:", err));
-
-    fetch(`http://localhost:8080/api/quality/my-orders/${userId}`)
-      .then((res) => {
-        if (!res.ok) {
+        if (!qualityRes.ok) {
           throw new Error("Failed to fetch quality records");
         }
-        return res.json();
-      })
-      .then((data) => setQualityRows(Array.isArray(data) ? data : []))
-      .catch((err) => console.error("Quality fetch error:", err));
+
+        const [ordersData, qualityData] = await Promise.all([ordersRes.json(), qualityRes.json()]);
+        if (disposed) return;
+        setOrders(Array.isArray(ordersData) ? ordersData : []);
+        setQualityRows(Array.isArray(qualityData) ? qualityData : []);
+      } catch (err) {
+        console.error("Dashboard refresh error:", err);
+      }
+    };
+
+    void fetchDashboardData();
+    const intervalId = window.setInterval(() => {
+      void fetchDashboardData();
+    }, 15000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
   }, [navigate]);
 
   const total = orders.length;
@@ -78,7 +120,9 @@ const Dashboard = () => {
       (order.grade || "").toLowerCase().includes(query) ||
       String(order.quantity ?? "").toLowerCase().includes(query) ||
       (order.status || "").toLowerCase().includes(query) ||
-      (order.deliveryTrackingStatus || "").toLowerCase().includes(query)
+      (order.deliveryTrackingStatus || "").toLowerCase().includes(query) ||
+      (order.transitMixerNumber || "").toLowerCase().includes(query) ||
+      (order.driverName || "").toLowerCase().includes(query)
     );
   });
 
@@ -148,12 +192,16 @@ const Dashboard = () => {
                   <th className="px-6 py-3">Grade</th>
                   <th className="px-6 py-3">Quantity</th>
                   <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Dispatch / Trip</th>
                   <th className="px-6 py-3">Quality</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredOrders.map((order) => {
                   const displayStatus = getDashboardStatus(order);
+                  const firstTrip = Array.isArray(order.tripDetails) && order.tripDetails.length > 0
+                    ? order.tripDetails[0]
+                    : null;
                   const quality = qualityRows.find((row) => row.orderId === order.orderId);
                   const qualityLabel = !quality
                     ? "PENDING"
@@ -174,13 +222,27 @@ const Dashboard = () => {
                               ? "bg-green-100 text-green-600"
                               : displayStatus === "PENDING_APPROVAL"
                               ? "bg-yellow-100 text-yellow-600"
+                              : displayStatus === "SCHEDULED"
+                              ? "bg-cyan-100 text-cyan-700"
+                              : displayStatus === "IN_PRODUCTION"
+                              ? "bg-indigo-100 text-indigo-700"
                               : displayStatus === "IN_TRANSIT" || displayStatus === "DISPATCHED"
                               ? "bg-blue-100 text-blue-600"
+                              : displayStatus === "APPROVED"
+                              ? "bg-slate-100 text-slate-700"
+                              : displayStatus === "RETURNED"
+                              ? "bg-rose-100 text-rose-700"
                               : "bg-gray-100 text-gray-600"
                           }`}
                         >
                           {displayStatus.replaceAll("_", " ")}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 text-xs text-gray-700">
+                        <p><span className="font-semibold">Truck:</span> {order.transitMixerNumber || firstTrip?.transitMixerNumber || "-"}</p>
+                        <p><span className="font-semibold">Driver:</span> {order.driverName || firstTrip?.driverName || "-"}</p>
+                        <p><span className="font-semibold">Trip:</span> {firstTrip?.tripNumber ? `#${firstTrip.tripNumber}` : "-"}</p>
+                        <p><span className="font-semibold">ETA:</span> {order.expectedArrivalTime || firstTrip?.estimatedDeliveryTime || "-"}</p>
                       </td>
                       <td className="px-6 py-4">
                         <span
@@ -202,7 +264,7 @@ const Dashboard = () => {
                 })}
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-6 text-center text-gray-500">
                       No orders found.
                     </td>
                   </tr>

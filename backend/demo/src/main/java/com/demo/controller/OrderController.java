@@ -1,11 +1,17 @@
 package com.demo.controller;
 
 import com.demo.entity.Order;
+import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
 import com.demo.entity.PaymentRecord;
+import com.demo.entity.DispatchTripRecord;
+import com.demo.entity.DeliveryTrackingStatus;
 import com.demo.entity.User;
 import com.demo.entity.ConcreteProductStock;
 import com.demo.repository.ConcreteProductStockRepository;
+import com.demo.repository.DispatchTripRecordRepository;
+import com.demo.repository.OrderAssignmentRepository;
+import com.demo.repository.OrderRepository;
 import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.UserRepository;
 import com.demo.service.OrderService;
@@ -14,7 +20,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -36,6 +44,15 @@ public class OrderController {
     @Autowired
     private ConcreteProductStockRepository productStockRepository;
 
+    @Autowired
+    private OrderAssignmentRepository orderAssignmentRepository;
+
+    @Autowired
+    private DispatchTripRecordRepository dispatchTripRecordRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
     // ✅ GET ALL
     @GetMapping
     public List<Order> getAllOrders() {
@@ -43,8 +60,11 @@ public class OrderController {
     }
 
     @GetMapping("/my-orders/{userId}")
-    public List<Order> getMyOrders(@PathVariable Long userId) {
-        return orderService.getOrdersByUserId(userId);
+    public List<Map<String, Object>> getMyOrders(@PathVariable Long userId) {
+        return orderService.getOrdersByUserId(userId)
+                .stream()
+                .map(this::toCustomerOrderView)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{orderId}/payments")
@@ -145,7 +165,7 @@ public class OrderController {
             }
 
             Order order = new Order();
-            order.setOrderId("ORD-" + UUID.randomUUID().toString().substring(0, 8));
+            order.setOrderId(generateReadableOrderId(grade));
             order.setGrade(grade);
             order.setQuantity(quantity);
             order.setAddress(address);
@@ -253,5 +273,126 @@ public class OrderController {
                 "paidAt", p.getPaidAt(),
                 "transactionId", p.getTransactionId()
         );
+    }
+
+    private String generateReadableOrderId(String grade) {
+        String gradeToken = sanitizeForOrderId(grade);
+        if (gradeToken.isEmpty()) {
+            gradeToken = "MIX";
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String dateToken = now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String timeToken = now.format(DateTimeFormatter.ofPattern("HHmmss"));
+        String base = "ORD-" + gradeToken + "-" + dateToken + "-" + timeToken;
+
+        String candidate = base;
+        int suffix = 1;
+        while (orderRepository.findByOrderId(candidate).isPresent()) {
+            candidate = base + "-" + suffix;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private String sanitizeForOrderId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.trim().toUpperCase().replaceAll("[^A-Z0-9]", "");
+    }
+
+    private Map<String, Object> toCustomerOrderView(Order order) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("id", order.getId());
+        row.put("orderId", order.getOrderId());
+        row.put("grade", order.getGrade());
+        row.put("quantity", order.getQuantity());
+        row.put("totalPrice", order.getTotalPrice());
+        row.put("address", order.getAddress());
+        row.put("deliveryDate", order.getDeliveryDate());
+        row.put("status", order.getStatus());
+        row.put("latestNotification", order.getLatestNotification());
+        row.put("dispatchDateTime", order.getDispatchDateTime());
+        row.put("expectedArrivalTime", order.getExpectedArrivalTime());
+        row.put("deliveryTrackingStatus", resolveTrackingStatus(order));
+        row.put("deliveryTrackingStatusLabel", resolveTrackingStatusLabel(resolveTrackingStatus(order)));
+        row.put("returnReason", order.getReturnReason());
+        row.put("returnedQuantity", order.getReturnedQuantity());
+
+        OrderAssignment assignment = orderAssignmentRepository.findByOrder_Id(order.getId()).orElse(null);
+        row.put("transitMixerNumber",
+                assignment != null && assignment.getTransitMixer() != null ? assignment.getTransitMixer().getMixerNumber() : null);
+        row.put("transitMixerCapacityM3",
+                assignment != null && assignment.getTransitMixer() != null ? assignment.getTransitMixer().getCapacityM3() : null);
+        row.put("driverName",
+                assignment != null && assignment.getDriver() != null ? assignment.getDriver().getDriverName() : null);
+        row.put("driverShift",
+                assignment != null && assignment.getDriver() != null ? assignment.getDriver().getDriverShift() : null);
+
+        List<Map<String, Object>> trips = dispatchTripRecordRepository.findByOrder_IdOrderByTripNumberAsc(order.getId())
+                .stream()
+                .map(this::toTripView)
+                .collect(Collectors.toList());
+        row.put("tripDetails", trips);
+        return row;
+    }
+
+    private Map<String, Object> toTripView(DispatchTripRecord trip) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("tripNumber", trip.getTripNumber());
+        row.put("status", trip.getStatus() == null ? "" : trip.getStatus().name());
+        row.put("shift", trip.getShift());
+        row.put("tripQuantityM3", trip.getTripQuantityM3());
+        row.put("dispatchTime", trip.getScheduledDispatchTime());
+        row.put("estimatedDeliveryTime", trip.getEstimatedDeliveryTime());
+        row.put("transitMixerNumber", trip.getTransitMixerNumber());
+        row.put("driverName", trip.getDriverName());
+        row.put("returnReason", trip.getReturnReason());
+        row.put("returnedQuantity", trip.getReturnedQuantity());
+        return row;
+    }
+
+    private DeliveryTrackingStatus resolveTrackingStatus(Order order) {
+        if (order.getStatus() == OrderStatus.RETURNED) return DeliveryTrackingStatus.RETURNED;
+        if (order.getStatus() == OrderStatus.DELIVERED) return DeliveryTrackingStatus.DELIVERED;
+
+        DeliveryTrackingStatus trackingStatus = order.getDeliveryTrackingStatus();
+        if (trackingStatus == DeliveryTrackingStatus.ON_THE_WAY) return DeliveryTrackingStatus.IN_TRANSIT;
+        if (order.getStatus() == OrderStatus.DISPATCHED) {
+            return trackingStatus == null || trackingStatus == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH
+                    ? DeliveryTrackingStatus.DISPATCHED
+                    : trackingStatus;
+        }
+        if (order.getStatus() == OrderStatus.IN_PRODUCTION
+                || order.getStatus() == OrderStatus.PENDING_APPROVAL
+                || order.getStatus() == OrderStatus.REJECTED) {
+            return null;
+        }
+        if (order.getStatus() == OrderStatus.APPROVED) {
+            return trackingStatus == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH ? trackingStatus : null;
+        }
+        if (trackingStatus != null) return trackingStatus;
+        if (order.getDispatchDateTime() != null) return DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH;
+        return null;
+    }
+
+    private String resolveTrackingStatusLabel(DeliveryTrackingStatus status) {
+        if (status == null) return null;
+        switch (status) {
+            case SCHEDULED_FOR_DISPATCH:
+                return "SCHEDULED";
+            case DISPATCHED:
+                return "DISPATCHED";
+            case ON_THE_WAY:
+            case IN_TRANSIT:
+                return "IN_TRANSIT";
+            case DELIVERED:
+                return "DELIVERED";
+            case RETURNED:
+                return "RETURNED";
+            default:
+                return status.name();
+        }
     }
 }
