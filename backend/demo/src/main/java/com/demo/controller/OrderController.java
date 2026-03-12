@@ -1,25 +1,28 @@
 package com.demo.controller;
 
 import com.demo.entity.Order;
+import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
 import com.demo.entity.PaymentRecord;
+import com.demo.entity.DispatchTripRecord;
+import com.demo.entity.DeliveryTrackingStatus;
 import com.demo.entity.User;
-import com.demo.entity.CustomerNotification;
 import com.demo.entity.ConcreteProductStock;
 import com.demo.repository.ConcreteProductStockRepository;
-import com.demo.repository.CustomerNotificationRepository;
+import com.demo.repository.DispatchTripRecordRepository;
+import com.demo.repository.OrderAssignmentRepository;
+import com.demo.repository.OrderRepository;
 import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.UserRepository;
 import com.demo.service.OrderService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -28,8 +31,6 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/orders")
 @CrossOrigin("*")
 public class OrderController {
-
-    private static final Logger logger = LoggerFactory.getLogger(OrderController.class);
 
     @Autowired
     private OrderService orderService;
@@ -44,7 +45,13 @@ public class OrderController {
     private ConcreteProductStockRepository productStockRepository;
 
     @Autowired
-    private CustomerNotificationRepository customerNotificationRepository;
+    private OrderAssignmentRepository orderAssignmentRepository;
+
+    @Autowired
+    private DispatchTripRecordRepository dispatchTripRecordRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
 
     // ✅ GET ALL
     @GetMapping
@@ -53,8 +60,11 @@ public class OrderController {
     }
 
     @GetMapping("/my-orders/{userId}")
-    public List<Order> getMyOrders(@PathVariable Long userId) {
-        return orderService.getOrdersByUserId(userId);
+    public List<Map<String, Object>> getMyOrders(@PathVariable Long userId) {
+        return orderService.getOrdersByUserId(userId)
+                .stream()
+                .map(this::toCustomerOrderView)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{orderId}/payments")
@@ -140,11 +150,6 @@ public class OrderController {
             String grade = String.valueOf(payload.getOrDefault("grade", "")).trim();
             double quantity = Double.parseDouble(String.valueOf(payload.getOrDefault("quantity", 0)));
             String address = String.valueOf(payload.getOrDefault("address", "")).trim();
-            String paymentOption = String.valueOf(payload.getOrDefault("paymentOption", "ONLINE")).trim().toUpperCase();
-            Integer creditDays = null;
-            if (payload.get("creditDays") != null) {
-                creditDays = Integer.valueOf(String.valueOf(payload.get("creditDays")));
-            }
 
             if (grade.isEmpty() || quantity <= 0 || address.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid order details"));
@@ -160,27 +165,11 @@ public class OrderController {
             }
 
             Order order = new Order();
-            order.setOrderId("ORD-" + UUID.randomUUID().toString().substring(0, 8));
+            order.setOrderId(generateReadableOrderId(grade));
             order.setGrade(grade);
             order.setQuantity(quantity);
             order.setAddress(address);
-            order.setPaymentOption(paymentOption);
-            if ("PAY_LATER".equals(paymentOption)) {
-                if (creditDays == null || creditDays <= 0) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Credit days are required for pay later"));
-                }
-                order.setCreditDays(creditDays);
-                order.setCreditApprovalStatus("PENDING");
-                order.setCreditRequestedAt(LocalDateTime.now());
-                order.setCreditDueDate(LocalDateTime.now().plusDays(creditDays));
-                order.setLatestNotification("Pay later request submitted and waiting for admin approval");
-                order.setStatus(OrderStatus.PENDING_APPROVAL);
-            } else {
-                order.setCreditDays(null);
-                order.setCreditApprovalStatus("NOT_REQUIRED");
-                order.setStatus(OrderStatus.APPROVED);
-                order.setApprovedAt(LocalDateTime.now());
-            }
+            order.setStatus(OrderStatus.APPROVED);
             order.setTotalPrice(resolveTotalPrice(grade, quantity, payload.get("totalPrice")));
             order.setUser(user);
 
@@ -197,42 +186,17 @@ public class OrderController {
             product.setUpdatedAt(LocalDateTime.now());
             productStockRepository.save(product);
 
-            if ("PAY_LATER".equals(saved.getPaymentOption())) {
-                try {
-                    CustomerNotification notification = new CustomerNotification();
-                    notification.setUser(user);
-                    notification.setOrderId(saved.getOrderId());
-                    notification.setTitle("Pay later request submitted");
-                    notification.setMessage("Order " + saved.getOrderId() + " was submitted for credit approval. Admin review is pending.");
-                    notification.setType("ORDER");
-                    notification.setCreatedAt(LocalDateTime.now());
-                    notification.setRead(false);
-                    notification.setDeleted(false);
-                    notification.setReminderKey(saved.getOrderId() + "-credit-request");
-                    customerNotificationRepository.save(notification);
-                } catch (Exception notificationError) {
-                    logger.error("Failed to create order notification for {}", saved.getOrderId(), notificationError);
-                }
-            }
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Order created successfully");
-            response.put("id", saved.getId());
-            response.put("orderId", saved.getOrderId());
-            response.put("grade", saved.getGrade());
-            response.put("quantity", saved.getQuantity());
-            response.put("status", saved.getStatus());
-            response.put("totalPrice", saved.getTotalPrice());
-            response.put("paymentOption", saved.getPaymentOption());
-            response.put("creditDays", saved.getCreditDays());
-            response.put("creditApprovalStatus", saved.getCreditApprovalStatus());
-            response.put("creditDueDate", saved.getCreditDueDate());
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            logger.error("Unable to create order", e);
-            return ResponseEntity.internalServerError().body(Map.of(
-                    "message", e.getMessage() == null || e.getMessage().isBlank() ? "Unable to create order" : e.getMessage()
+            return ResponseEntity.ok(Map.of(
+                    "message", "Order created successfully",
+                    "id", saved.getId(),
+                    "orderId", saved.getOrderId(),
+                    "grade", saved.getGrade(),
+                    "quantity", saved.getQuantity(),
+                    "status", saved.getStatus(),
+                    "totalPrice", saved.getTotalPrice()
             ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Unable to create order"));
         }
     }
 
@@ -309,5 +273,126 @@ public class OrderController {
                 "paidAt", p.getPaidAt(),
                 "transactionId", p.getTransactionId()
         );
+    }
+
+    private String generateReadableOrderId(String grade) {
+        String gradeToken = sanitizeForOrderId(grade);
+        if (gradeToken.isEmpty()) {
+            gradeToken = "MIX";
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String dateToken = now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String timeToken = now.format(DateTimeFormatter.ofPattern("HHmmss"));
+        String base = "ORD-" + gradeToken + "-" + dateToken + "-" + timeToken;
+
+        String candidate = base;
+        int suffix = 1;
+        while (orderRepository.findByOrderId(candidate).isPresent()) {
+            candidate = base + "-" + suffix;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private String sanitizeForOrderId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.trim().toUpperCase().replaceAll("[^A-Z0-9]", "");
+    }
+
+    private Map<String, Object> toCustomerOrderView(Order order) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("id", order.getId());
+        row.put("orderId", order.getOrderId());
+        row.put("grade", order.getGrade());
+        row.put("quantity", order.getQuantity());
+        row.put("totalPrice", order.getTotalPrice());
+        row.put("address", order.getAddress());
+        row.put("deliveryDate", order.getDeliveryDate());
+        row.put("status", order.getStatus());
+        row.put("latestNotification", order.getLatestNotification());
+        row.put("dispatchDateTime", order.getDispatchDateTime());
+        row.put("expectedArrivalTime", order.getExpectedArrivalTime());
+        row.put("deliveryTrackingStatus", resolveTrackingStatus(order));
+        row.put("deliveryTrackingStatusLabel", resolveTrackingStatusLabel(resolveTrackingStatus(order)));
+        row.put("returnReason", order.getReturnReason());
+        row.put("returnedQuantity", order.getReturnedQuantity());
+
+        OrderAssignment assignment = orderAssignmentRepository.findByOrder_Id(order.getId()).orElse(null);
+        row.put("transitMixerNumber",
+                assignment != null && assignment.getTransitMixer() != null ? assignment.getTransitMixer().getMixerNumber() : null);
+        row.put("transitMixerCapacityM3",
+                assignment != null && assignment.getTransitMixer() != null ? assignment.getTransitMixer().getCapacityM3() : null);
+        row.put("driverName",
+                assignment != null && assignment.getDriver() != null ? assignment.getDriver().getDriverName() : null);
+        row.put("driverShift",
+                assignment != null && assignment.getDriver() != null ? assignment.getDriver().getDriverShift() : null);
+
+        List<Map<String, Object>> trips = dispatchTripRecordRepository.findByOrder_IdOrderByTripNumberAsc(order.getId())
+                .stream()
+                .map(this::toTripView)
+                .collect(Collectors.toList());
+        row.put("tripDetails", trips);
+        return row;
+    }
+
+    private Map<String, Object> toTripView(DispatchTripRecord trip) {
+        Map<String, Object> row = new HashMap<>();
+        row.put("tripNumber", trip.getTripNumber());
+        row.put("status", trip.getStatus() == null ? "" : trip.getStatus().name());
+        row.put("shift", trip.getShift());
+        row.put("tripQuantityM3", trip.getTripQuantityM3());
+        row.put("dispatchTime", trip.getScheduledDispatchTime());
+        row.put("estimatedDeliveryTime", trip.getEstimatedDeliveryTime());
+        row.put("transitMixerNumber", trip.getTransitMixerNumber());
+        row.put("driverName", trip.getDriverName());
+        row.put("returnReason", trip.getReturnReason());
+        row.put("returnedQuantity", trip.getReturnedQuantity());
+        return row;
+    }
+
+    private DeliveryTrackingStatus resolveTrackingStatus(Order order) {
+        if (order.getStatus() == OrderStatus.RETURNED) return DeliveryTrackingStatus.RETURNED;
+        if (order.getStatus() == OrderStatus.DELIVERED) return DeliveryTrackingStatus.DELIVERED;
+
+        DeliveryTrackingStatus trackingStatus = order.getDeliveryTrackingStatus();
+        if (trackingStatus == DeliveryTrackingStatus.ON_THE_WAY) return DeliveryTrackingStatus.IN_TRANSIT;
+        if (order.getStatus() == OrderStatus.DISPATCHED) {
+            return trackingStatus == null || trackingStatus == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH
+                    ? DeliveryTrackingStatus.DISPATCHED
+                    : trackingStatus;
+        }
+        if (order.getStatus() == OrderStatus.IN_PRODUCTION
+                || order.getStatus() == OrderStatus.PENDING_APPROVAL
+                || order.getStatus() == OrderStatus.REJECTED) {
+            return null;
+        }
+        if (order.getStatus() == OrderStatus.APPROVED) {
+            return trackingStatus == DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH ? trackingStatus : null;
+        }
+        if (trackingStatus != null) return trackingStatus;
+        if (order.getDispatchDateTime() != null) return DeliveryTrackingStatus.SCHEDULED_FOR_DISPATCH;
+        return null;
+    }
+
+    private String resolveTrackingStatusLabel(DeliveryTrackingStatus status) {
+        if (status == null) return null;
+        switch (status) {
+            case SCHEDULED_FOR_DISPATCH:
+                return "SCHEDULED";
+            case DISPATCHED:
+                return "DISPATCHED";
+            case ON_THE_WAY:
+            case IN_TRANSIT:
+                return "IN_TRANSIT";
+            case DELIVERED:
+                return "DELIVERED";
+            case RETURNED:
+                return "RETURNED";
+            default:
+                return status.name();
+        }
     }
 }

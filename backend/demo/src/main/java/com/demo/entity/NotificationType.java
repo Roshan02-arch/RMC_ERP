@@ -1,0 +1,11 @@
+package com.demo.entity;
+
+public enum NotificationType {
+    ORDER_APPROVED,
+    IN_PRODUCTION,
+    DISPATCH_SCHEDULED,
+    VEHICLE_ASSIGNED,
+    DELIVERY_STATUS_UPDATED,
+    ORDER_DELIVERED,
+    ORDER_RETURNED
+}

@@ -20,10 +20,15 @@ public class DispatchTripRecord {
 
     private LocalDateTime scheduledDispatchTime;
     private LocalDateTime actualDispatchTime;
+    private LocalDateTime estimatedDeliveryTime;
     private LocalDateTime deliveredTime;
 
+    private Double tripQuantityM3;
+    private String shift;
     private Double fuelUsedLiters;
     private String remarks;
+    private String returnReason;
+    private Double returnedQuantity;
 
     private String transitMixerNumber;
     private String driverName;
@@ -81,6 +86,30 @@ public class DispatchTripRecord {
         this.deliveredTime = deliveredTime;
     }
 
+    public LocalDateTime getEstimatedDeliveryTime() {
+        return estimatedDeliveryTime;
+    }
+
+    public void setEstimatedDeliveryTime(LocalDateTime estimatedDeliveryTime) {
+        this.estimatedDeliveryTime = estimatedDeliveryTime;
+    }
+
+    public Double getTripQuantityM3() {
+        return tripQuantityM3;
+    }
+
+    public void setTripQuantityM3(Double tripQuantityM3) {
+        this.tripQuantityM3 = tripQuantityM3;
+    }
+
+    public String getShift() {
+        return shift;
+    }
+
+    public void setShift(String shift) {
+        this.shift = shift;
+    }
+
     public Double getFuelUsedLiters() {
         return fuelUsedLiters;
     }
@@ -95,6 +124,22 @@ public class DispatchTripRecord {
 
     public void setRemarks(String remarks) {
         this.remarks = remarks;
+    }
+
+    public String getReturnReason() {
+        return returnReason;
+    }
+
+    public void setReturnReason(String returnReason) {
+        this.returnReason = returnReason;
+    }
+
+    public Double getReturnedQuantity() {
+        return returnedQuantity;
+    }
+
+    public void setReturnedQuantity(Double returnedQuantity) {
+        this.returnedQuantity = returnedQuantity;
     }
 
     public String getTransitMixerNumber() {

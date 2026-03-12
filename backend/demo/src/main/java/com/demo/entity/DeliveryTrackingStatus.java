@@ -5,5 +5,6 @@ public enum DeliveryTrackingStatus {
     DISPATCHED,
     IN_TRANSIT,
     ON_THE_WAY,
-    DELIVERED
+    DELIVERED,
+    RETURNED
 }

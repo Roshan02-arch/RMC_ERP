@@ -48,6 +48,8 @@ public class Order {
     private Double totalFuelUsedLiters;
     private LocalDateTime deliveredAt;
     private String deliveryConfirmationDetails;
+    private String returnReason;
+    private Double returnedQuantity;
 
     @Enumerated(EnumType.STRING)
     private DeliveryTrackingStatus deliveryTrackingStatus;
@@ -338,6 +340,22 @@ public class Order {
 
     public void setDeliveryConfirmationDetails(String deliveryConfirmationDetails) {
         this.deliveryConfirmationDetails = deliveryConfirmationDetails;
+    }
+
+    public String getReturnReason() {
+        return returnReason;
+    }
+
+    public void setReturnReason(String returnReason) {
+        this.returnReason = returnReason;
+    }
+
+    public Double getReturnedQuantity() {
+        return returnedQuantity;
+    }
+
+    public void setReturnedQuantity(Double returnedQuantity) {
+        this.returnedQuantity = returnedQuantity;
     }
 
     public DeliveryTrackingStatus getDeliveryTrackingStatus() {

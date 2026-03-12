@@ -4,5 +4,6 @@ public enum DispatchTripStatus {
     SCHEDULED,
     DISPATCHED,
     IN_TRANSIT,
-    DELIVERED
+    DELIVERED,
+    RETURNED
 }

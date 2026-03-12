@@ -1,13 +1,19 @@
-import { useState } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { Link } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import { FaCircleCheck } from "react-icons/fa6";
 import UserNavbar from "../../components/UserNavbar";
 import GlobalFooter from "../../components/GlobalFooter";
+import aboutImage from "../../images/about.jpg";
 
 const AboutUsPage = () => {
   const [showMore, setShowMore] = useState(false);
   const role = normalizeRole(localStorage.getItem("role"));
+
+  const handleImageError = (event: SyntheticEvent<HTMLImageElement>) => {
+    event.currentTarget.onerror = null;
+    event.currentTarget.src = aboutImage;
+  };
 
   return (
     <div className="min-h-screen bg-[#f5f7fb]">
@@ -77,6 +83,7 @@ const AboutUsPage = () => {
             <img
               src="https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&w=1200&q=80"
               alt="About RRY Infra"
+              onError={handleImageError}
               className="relative rounded-md shadow-2xl w-full h-[460px] object-cover"
             />
           </div>
@@ -154,26 +161,30 @@ const AboutUsPage = () => {
               </div>
             </div>
 
-            <div className="relative max-w-xl mx-auto w-full">
-              <div className="absolute -top-8 right-0 w-[82%] h-[92%] border border-slate-300 rounded-[90px]" />
-              <div className="absolute -bottom-8 -left-6 w-[82%] h-[90%] bg-sky-600 rounded-[70px]" />
-              <div className="relative bg-[#5f9ec8] p-4 rounded-[70px] shadow-2xl">
-                <div className="grid grid-cols-3 gap-3 mb-3">
+            <div className="relative max-w-[620px] mx-auto w-full">
+              <div className="absolute -top-9 right-2 w-[84%] h-[94%] border border-slate-300/90 rounded-tr-[100px] rounded-br-[100px]" />
+              <div className="absolute -bottom-9 -left-7 w-[84%] h-[90%] bg-sky-600 rounded-bl-[100px]" />
+              <div className="relative bg-[#61a4d0] p-4 rounded-tr-[100px] rounded-bl-[100px] shadow-2xl overflow-hidden">
+                <div className="absolute left-3 top-[43%] w-7 h-7 rounded-full border-2 border-sky-500/90 bg-transparent" />
+                <div className="grid grid-cols-[2fr_1fr] gap-3 mb-3">
                   <img
-                    src="https://images.unsplash.com/photo-1581093450021-4a7360e9a6b2?auto=format&fit=crop&w=900&q=80"
-                    alt="Quality lab equipment"
-                    className="col-span-2 h-44 w-full object-cover rounded"
+                    src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=900&q=80"
+                    alt="RMC quality lab setup"
+                    onError={handleImageError}
+                    className="h-40 w-full object-cover rounded-sm"
                   />
                   <img
-                    src="https://images.unsplash.com/photo-1574359411659-15573d9f4f31?auto=format&fit=crop&w=500&q=80"
-                    alt="Concrete test tank"
-                    className="col-span-1 h-44 w-full object-cover rounded"
+                    src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=500&q=80"
+                    alt="Concrete testing pit"
+                    onError={handleImageError}
+                    className="h-40 w-full object-cover rounded-sm"
                   />
                 </div>
                 <img
-                  src="https://images.unsplash.com/photo-1581090700227-1e8e8d3f3f0b?auto=format&fit=crop&w=1200&q=80"
-                  alt="Batch cabin control room"
-                  className="h-52 w-full object-cover rounded"
+                  src="https://images.unsplash.com/photo-1581092921461-7d65ca45f3d9?auto=format&fit=crop&w=1200&q=80"
+                  alt="Batch control room operator"
+                  onError={handleImageError}
+                  className="h-44 w-full object-cover rounded-sm"
                 />
               </div>
             </div>

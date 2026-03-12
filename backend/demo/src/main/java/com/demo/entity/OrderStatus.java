@@ -6,5 +6,6 @@ public enum OrderStatus {
     IN_PRODUCTION,
     DISPATCHED,
     DELIVERED,
+    RETURNED,
     REJECTED
 }

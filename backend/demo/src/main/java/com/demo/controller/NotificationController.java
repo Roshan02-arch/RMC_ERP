@@ -1,23 +1,23 @@
 package com.demo.controller;
 
-import com.demo.entity.CustomerNotification;
-import com.demo.entity.Order;
-import com.demo.entity.PaymentRecord;
+import com.demo.entity.OrderNotification;
 import com.demo.entity.User;
-import com.demo.repository.CustomerNotificationRepository;
-import com.demo.repository.OrderRepository;
-import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.UserRepository;
+import com.demo.service.OrderNotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -25,124 +25,79 @@ import java.util.Map;
 public class NotificationController {
 
     @Autowired
-    private CustomerNotificationRepository notificationRepository;
-
-    @Autowired
     private UserRepository userRepository;
 
     @Autowired
-    private OrderRepository orderRepository;
+    private OrderNotificationService orderNotificationService;
 
-    @Autowired
-    private PaymentRecordRepository paymentRecordRepository;
-
-    @GetMapping("/{userId}")
-    public ResponseEntity<?> getCustomerNotifications(@PathVariable Long userId) {
+    @GetMapping("/my/{userId}")
+    public ResponseEntity<?> getMyNotifications(@PathVariable Long userId) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
 
-        generateDueReminders(user);
-
-        List<Map<String, Object>> rows = notificationRepository
-                .findByUser_IdAndDeletedFalseOrderByCreatedAtDesc(userId)
+        List<Map<String, Object>> rows = orderNotificationService
+                .getNotificationsByUser(userId)
                 .stream()
                 .map(this::toView)
-                .toList();
+                .collect(Collectors.toList());
 
         return ResponseEntity.ok(rows);
     }
 
+    @GetMapping("/my/{userId}/unread-count")
+    public ResponseEntity<?> getUnreadCount(@PathVariable Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(404).body(Map.of("message", "User not found"));
+        }
+
+        return ResponseEntity.ok(Map.of("unreadCount", orderNotificationService.getUnreadCount(userId)));
+    }
+
     @PutMapping("/{notificationId}/read")
-    public ResponseEntity<?> markAsRead(@PathVariable Long notificationId, @RequestParam Long userId) {
-        CustomerNotification notification = notificationRepository.findByIdAndUser_Id(notificationId, userId).orElse(null);
-        if (notification == null) {
+    public ResponseEntity<?> markAsRead(
+            @PathVariable Long notificationId,
+            @RequestParam Long userId
+    ) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(404).body(Map.of("message", "User not found"));
+        }
+
+        boolean updated = orderNotificationService.markAsRead(userId, notificationId);
+        if (!updated) {
             return ResponseEntity.status(404).body(Map.of("message", "Notification not found"));
         }
-        notification.setRead(true);
-        notificationRepository.save(notification);
+
         return ResponseEntity.ok(Map.of("message", "Notification marked as read"));
     }
 
-    @DeleteMapping("/{notificationId}")
-    public ResponseEntity<?> deleteNotification(@PathVariable Long notificationId, @RequestParam Long userId) {
-        CustomerNotification notification = notificationRepository.findByIdAndUser_Id(notificationId, userId).orElse(null);
-        if (notification == null) {
-            return ResponseEntity.status(404).body(Map.of("message", "Notification not found"));
+    @PutMapping("/my/{userId}/read-all")
+    public ResponseEntity<?> markAllAsRead(@PathVariable Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
-        notification.setDeleted(true);
-        notificationRepository.save(notification);
-        return ResponseEntity.ok(Map.of("message", "Notification deleted"));
+
+        int updatedCount = orderNotificationService.markAllAsRead(userId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Notifications marked as read",
+                "updatedCount", updatedCount
+        ));
     }
 
-    private void generateDueReminders(User user) {
-        LocalDate today = LocalDate.now();
-        List<Order> orders = orderRepository.findByUserId(user.getId());
-
-        for (Order order : orders) {
-            if (!"PAY_LATER".equalsIgnoreCase(order.getPaymentOption())
-                    || !"APPROVED".equalsIgnoreCase(order.getCreditApprovalStatus())
-                    || order.getCreditDueDate() == null) {
-                continue;
-            }
-
-            LocalDate reviewDate = order.getCreditReviewedAt() != null
-                    ? order.getCreditReviewedAt().toLocalDate()
-                    : order.getApprovedAt() != null
-                    ? order.getApprovedAt().toLocalDate()
-                    : today;
-
-            long daysSinceApproval = ChronoUnit.DAYS.between(reviewDate, today);
-            if (daysSinceApproval < 2 || daysSinceApproval % 2 != 0) {
-                continue;
-            }
-            if (today.isAfter(order.getCreditDueDate().toLocalDate())) {
-                continue;
-            }
-            if (isPaymentCompleted(order)) {
-                continue;
-            }
-
-            String reminderKey = order.getOrderId() + "-credit-reminder-" + today;
-            if (notificationRepository.existsByUser_IdAndReminderKey(user.getId(), reminderKey)) {
-                continue;
-            }
-
-            CustomerNotification notification = new CustomerNotification();
-            notification.setUser(user);
-            notification.setOrderId(order.getOrderId());
-            notification.setTitle("Credit due reminder");
-            notification.setMessage("Pay later order " + order.getOrderId() + " is approved. Due date is " + order.getCreditDueDate() + ". Please complete payment before due date.");
-            notification.setType("CREDIT_REMINDER");
-            notification.setCreatedAt(LocalDateTime.now());
-            notification.setRead(false);
-            notification.setDeleted(false);
-            notification.setReminderKey(reminderKey);
-            notificationRepository.save(notification);
-        }
-    }
-
-    private boolean isPaymentCompleted(Order order) {
-        List<PaymentRecord> records = paymentRecordRepository.findByOrder_Id(order.getId());
-        double totalPaid = records.stream()
-                .filter(record -> record.getMethod() == null
-                        || !record.getMethod().trim().toUpperCase().startsWith("CASH_ON_DELIVERY"))
-                .mapToDouble(PaymentRecord::getAmount)
-                .sum();
-        double totalPayable = order.getTotalPrice() + ((order.getTotalPrice() * 18.0) / 100.0);
-        return totalPaid >= totalPayable || totalPaid >= order.getTotalPrice();
-    }
-
-    private Map<String, Object> toView(CustomerNotification notification) {
+    private Map<String, Object> toView(OrderNotification n) {
         Map<String, Object> row = new HashMap<>();
-        row.put("id", notification.getId());
-        row.put("orderId", notification.getOrderId());
-        row.put("title", notification.getTitle());
-        row.put("message", notification.getMessage());
-        row.put("type", notification.getType());
-        row.put("createdAt", notification.getCreatedAt());
-        row.put("read", notification.isRead());
+        row.put("id", n.getId());
+        row.put("userId", n.getUserId());
+        row.put("orderId", n.getOrderId() == null ? "" : n.getOrderId());
+        row.put("title", n.getTitle() == null ? "" : n.getTitle());
+        row.put("message", n.getMessage() == null ? "" : n.getMessage());
+        row.put("type", n.getType() == null ? "" : n.getType().name());
+        row.put("isRead", n.isRead());
+        row.put("createdAt", n.getCreatedAt());
         return row;
     }
 }

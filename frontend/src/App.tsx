@@ -11,8 +11,7 @@ import BillingPayment from "./Pages/customer/BillingPayment";
 import QualityAccess from "./Pages/customer/QualityAccess";
 import OrderSuccess from "./Pages/customer/OrderSuccess";
 import CheckoutPayment from "./Pages/customer/CheckoutPayment";
-import PayLaterRequest from "./Pages/customer/PayLaterRequest";
-import PayLaterOrders from "./Pages/customer/PayLaterOrders";
+import Notifications from "./Pages/customer/Notifications";
 import AdminDashboard from "./Pages/admin/AdminDashboard";
 import AdminOrders from "./Pages/admin/AdminOrders";
 import AdminUsers from "./Pages/admin/AdminUsers";
@@ -56,12 +55,11 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/purchaseproduct" element={<PurchaseProduct />} />
           <Route path="/checkout-payment" element={<CheckoutPayment />} />
-          <Route path="/pay-later-request" element={<PayLaterRequest />} />
-          <Route path="/pay-later-orders" element={<PayLaterOrders />} />
           <Route path="/delivery-tracking" element={<DeliveryTracking />} />
           <Route path="/billing-payment" element={<BillingPayment />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/customize-profile" element={<CustomizeProfile />} />
         </Route>
 

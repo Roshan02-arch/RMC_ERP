@@ -5,6 +5,7 @@ public class VehicleScheduleRequest {
     private String transitMixerNumber;
     private String driverName;
     private String driverShift;
+    private Double transitMixerCapacityM3;
     private String backupTransitMixerNumber;
     private String backupDriverName;
 
@@ -30,6 +31,14 @@ public class VehicleScheduleRequest {
 
     public void setDriverShift(String driverShift) {
         this.driverShift = driverShift;
+    }
+
+    public Double getTransitMixerCapacityM3() {
+        return transitMixerCapacityM3;
+    }
+
+    public void setTransitMixerCapacityM3(Double transitMixerCapacityM3) {
+        this.transitMixerCapacityM3 = transitMixerCapacityM3;
     }
 
     public String getBackupTransitMixerNumber() {

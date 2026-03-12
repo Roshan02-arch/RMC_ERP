@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 interface Order {
   id: number;
   orderId: string;
+  quantity?: number;
   status: string;
-  paymentOption?: string;
-  creditDays?: number;
-  creditApprovalStatus?: string;
-  creditDueDate?: string;
+  deliveryTrackingStatus?: string;
   deliveryTrackingStatusLabel?: string;
   productionDate?: string;
   productionSlotStart?: string;
@@ -24,6 +22,9 @@ interface Order {
   driverName?: string;
   driverShift?: string;
   latestNotification?: string;
+  delayInMinutes?: number;
+  returnReason?: string;
+  returnedQuantity?: number;
   liveLatitude?: number;
   liveLongitude?: number;
   plannedTrips?: number;
@@ -44,23 +45,18 @@ interface TripRecord {
   id?: number;
   tripNumber?: number;
   status?: string;
+  shift?: string;
+  tripQuantityM3?: number;
   scheduledDispatchTime?: string;
   actualDispatchTime?: string;
+  estimatedDeliveryTime?: string;
   deliveredTime?: string;
   fuelUsedLiters?: number;
   remarks?: string;
+  returnReason?: string;
+  returnedQuantity?: number;
   transitMixerNumber?: string;
   driverName?: string;
-}
-
-interface MonitoringRecord {
-  orderId: string;
-  dispatchStatus?: string;
-  vehicleId?: string;
-  driverName?: string;
-  plannedTrips?: number;
-  completedTrips?: number;
-  totalFuelUsedLiters?: number;
 }
 
 const API = "http://localhost:8080/api/admin";
@@ -68,7 +64,6 @@ const TRACKING_API = "http://localhost:8080/api/delivery-tracking";
 
 const AdminSchedule = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { showMessage, dialogNode } = useCenteredDialog();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -85,6 +80,9 @@ const AdminSchedule = () => {
     dispatchDateTime: "",
     tripPlanning: "SINGLE_TRIP",
     plannedTrips: "1",
+    truckCapacityM3: "6",
+    estimatedTravelMinutes: "90",
+    dispatchIntervalMinutes: "60",
     deliverySequence: "",
     expectedArrivalTime: "",
   });
@@ -102,23 +100,9 @@ const AdminSchedule = () => {
   });
   const [vehicleAvailability, setVehicleAvailability] = useState<AvailabilityItem[]>([]);
   const [driverAvailability, setDriverAvailability] = useState<AvailabilityItem[]>([]);
-  const [deliveryStatusForm, setDeliveryStatusForm] = useState({
-    deliveryStatus: "SCHEDULED",
-    delayInMinutes: "",
-    delayUpdateMessage: "",
-    deliveryConfirmationDetails: "",
-  });
-  const [tripForm, setTripForm] = useState({
-    tripNumber: "1",
-    status: "SCHEDULED",
-    fuelUsedLiters: "",
-    remarks: "",
-    transitMixerNumber: "",
-    driverName: "",
-  });
   const [tripRecords, setTripRecords] = useState<TripRecord[]>([]);
-  const [monitoringRecords, setMonitoringRecords] = useState<MonitoringRecord[]>([]);
-  const navState = (location.state as { selectedOrderId?: string } | null) || null;
+  const [tripPlanPreview, setTripPlanPreview] = useState<Array<{ tripNumber: number; quantityM3: number }>>([]);
+  const [selectedTripPreview, setSelectedTripPreview] = useState("");
 
   const [rescheduleReason, setRescheduleReason] = useState("");
 
@@ -126,6 +110,72 @@ const AdminSchedule = () => {
     () => orders.find((order) => order.orderId === selectedOrderId),
     [orders, selectedOrderId]
   );
+  const selectedTripPlan = useMemo(
+    () => tripPlanPreview.find((trip) => String(trip.tripNumber) === selectedTripPreview) ?? null,
+    [tripPlanPreview, selectedTripPreview]
+  );
+  const isVehicleAndDriverAssigned = useMemo(() => {
+    const mixer = String(selectedOrder?.transitMixerNumber || "").trim();
+    const driver = String(selectedOrder?.driverName || "").trim();
+    return mixer.length > 0 && driver.length > 0;
+  }, [selectedOrder?.transitMixerNumber, selectedOrder?.driverName]);
+  const formatDateTimeWith12And24 = (value?: string | null) => {
+    if (!value) return "-";
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return value;
+
+    const dateLabel = dt.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const time12 = dt.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const time24 = dt.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    return `${dateLabel}, ${time12} (${time24})`;
+  };
+  const getAutomatedDeliveryStatus = (order?: Order | null) => {
+    if (!order) return "UNKNOWN";
+    const status = String(order.status || "").trim().toUpperCase();
+    const trackingLabel = String(order.deliveryTrackingStatusLabel || "").trim().toUpperCase();
+    const tracking = String(order.deliveryTrackingStatus || "").trim().toUpperCase();
+
+    if (status === "RETURNED" || trackingLabel === "RETURNED" || tracking === "RETURNED") return "RETURNED";
+    if (status === "DELIVERED" || trackingLabel === "DELIVERED" || tracking === "DELIVERED") return "DELIVERED";
+    if (status === "IN_PRODUCTION") return "IN_PRODUCTION";
+    if (trackingLabel === "IN_TRANSIT" || tracking === "IN_TRANSIT" || tracking === "ON_THE_WAY") return "IN_TRANSIT";
+    if (status === "DISPATCHED" || trackingLabel === "DISPATCHED" || tracking === "DISPATCHED") return "DISPATCHED";
+    if (trackingLabel === "SCHEDULED" || tracking === "SCHEDULED_FOR_DISPATCH") return "SCHEDULED";
+    if (status === "APPROVED") return "APPROVED";
+    if (status === "PENDING_APPROVAL") return "PENDING_APPROVAL";
+    if (status === "REJECTED") return "REJECTED";
+    return status || "UNKNOWN";
+  };
+  const automatedDeliveryStatus = useMemo(
+    () => getAutomatedDeliveryStatus(selectedOrder),
+    [selectedOrder]
+  );
+  const formatStatusLabel = (value: string) => value.replaceAll("_", " ");
+  const statusBadgeClass =
+    automatedDeliveryStatus === "DELIVERED"
+      ? "bg-green-100 text-green-700"
+      : automatedDeliveryStatus === "IN_PRODUCTION"
+      ? "bg-indigo-100 text-indigo-700"
+      : automatedDeliveryStatus === "DISPATCHED" || automatedDeliveryStatus === "IN_TRANSIT"
+      ? "bg-blue-100 text-blue-700"
+      : automatedDeliveryStatus === "SCHEDULED"
+      ? "bg-cyan-100 text-cyan-700"
+      : automatedDeliveryStatus === "RETURNED"
+      ? "bg-rose-100 text-rose-700"
+      : "bg-slate-100 text-slate-700";
 
   useEffect(() => {
     setGps({
@@ -143,13 +193,7 @@ const AdminSchedule = () => {
   useEffect(() => {
     if (!selectedOrder) {
       setTripRecords([]);
-      return;
     }
-
-    setDeliveryStatusForm((prev) => ({
-      ...prev,
-      deliveryStatus: selectedOrder.deliveryTrackingStatusLabel || "SCHEDULED",
-    }));
   }, [selectedOrder]);
 
   const fetchOrders = async () => {
@@ -160,10 +204,6 @@ const AdminSchedule = () => {
       setOrders(items);
       if (items.length === 0) {
         setSelectedOrderId("");
-        return;
-      }
-      if (navState?.selectedOrderId && items.some((order: Order) => order.orderId === navState.selectedOrderId)) {
-        setSelectedOrderId(navState.selectedOrderId);
         return;
       }
       if (!selectedOrderId) {
@@ -185,12 +225,26 @@ const AdminSchedule = () => {
       return;
     }
     void fetchOrders();
-    void fetchMonitoring();
   }, [navigate]);
 
   useEffect(() => {
     void fetchTripRecords();
   }, [selectedOrderId]);
+
+  useEffect(() => {
+    void calculateTripPlanPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrderId]);
+
+  useEffect(() => {
+    if (tripPlanPreview.length === 0) {
+      setSelectedTripPreview("");
+      return;
+    }
+    if (!tripPlanPreview.some((trip) => String(trip.tripNumber) === selectedTripPreview)) {
+      setSelectedTripPreview(String(tripPlanPreview[0].tripNumber));
+    }
+  }, [tripPlanPreview, selectedTripPreview]);
 
   const send = async (url: string, payload: Record<string, unknown>) => {
     if (!selectedOrderId) {
@@ -223,7 +277,6 @@ const AdminSchedule = () => {
     await showMessage(message || "Updated successfully");
     await fetchOrders();
     await fetchTripRecords();
-    await fetchMonitoring();
     return true;
   };
 
@@ -292,27 +345,6 @@ const AdminSchedule = () => {
     }
   };
 
-  const fetchMonitoring = async () => {
-    const adminUserId = localStorage.getItem("userId");
-    if (!adminUserId) {
-      setMonitoringRecords([]);
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API}/dispatch/monitoring?adminUserId=${encodeURIComponent(adminUserId)}`);
-      if (!res.ok) {
-        setMonitoringRecords([]);
-        return;
-      }
-      const data = await res.json();
-      setMonitoringRecords(Array.isArray(data?.records) ? data.records : []);
-    } catch (error) {
-      console.error("Failed to fetch dispatch monitoring", error);
-      setMonitoringRecords([]);
-    }
-  };
-
   const loadAvailability = async (windowStart: string, windowEnd: string, silent = false) => {
     const adminUserId = localStorage.getItem("userId");
     if (!adminUserId) {
@@ -371,12 +403,50 @@ const AdminSchedule = () => {
 
   const onDispatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isVehicleAndDriverAssigned) {
+      await showMessage("Assign vehicle and driver before dispatch scheduling.");
+      return;
+    }
     const plannedTrips = Number(dispatch.plannedTrips);
+    const truckCapacityM3 = Number(dispatch.truckCapacityM3);
+    const estimatedTravelMinutes = Number(dispatch.estimatedTravelMinutes);
+    const dispatchIntervalMinutes = Number(dispatch.dispatchIntervalMinutes);
     await send("/schedule/dispatch", {
       ...dispatch,
       plannedTrips: Number.isFinite(plannedTrips) ? plannedTrips : 1,
+      truckCapacityM3: Number.isFinite(truckCapacityM3) ? truckCapacityM3 : 6,
+      estimatedTravelMinutes: Number.isFinite(estimatedTravelMinutes) ? estimatedTravelMinutes : 90,
+      dispatchIntervalMinutes: Number.isFinite(dispatchIntervalMinutes) ? dispatchIntervalMinutes : 60,
     });
+    await calculateTripPlanPreview();
   };
+
+  async function calculateTripPlanPreview() {
+    if (!selectedOrderId) {
+      setTripPlanPreview([]);
+      return;
+    }
+    const adminUserId = localStorage.getItem("userId");
+    if (!adminUserId) {
+      setTripPlanPreview([]);
+      return;
+    }
+    const capacityM3 = Number(dispatch.truckCapacityM3);
+    const res = await fetch(
+      `${API}/orders/${selectedOrderId}/dispatch/calculate-trips?adminUserId=${encodeURIComponent(adminUserId)}&capacityM3=${encodeURIComponent(
+        String(Number.isFinite(capacityM3) && capacityM3 > 0 ? capacityM3 : 6)
+      )}`
+    );
+    if (!res.ok) {
+      setTripPlanPreview([]);
+      return;
+    }
+    const data = await res.json();
+    setTripPlanPreview(Array.isArray(data?.tripPlan) ? data.tripPlan : []);
+    if (data?.requiredTrips) {
+      setDispatch((prev) => ({ ...prev, plannedTrips: String(data.requiredTrips), tripPlanning: data.requiredTrips > 1 ? "MULTIPLE_TRIPS" : "SINGLE_TRIP" }));
+    }
+  }
 
   const onVehicleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -408,105 +478,24 @@ const AdminSchedule = () => {
     });
   };
 
-  const onDeliveryStatusSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const adminUserId = localStorage.getItem("userId");
-    if (!adminUserId || !selectedOrderId) {
-      await showMessage("Please login again and select an order");
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      deliveryStatus: deliveryStatusForm.deliveryStatus,
-      delayUpdateMessage: deliveryStatusForm.delayUpdateMessage,
-      deliveryConfirmationDetails: deliveryStatusForm.deliveryConfirmationDetails,
-    };
-
-    if (deliveryStatusForm.delayInMinutes.trim() !== "") {
-      payload.delayInMinutes = Number(deliveryStatusForm.delayInMinutes);
-    }
-    const res = await fetch(
-      `${API}/orders/${selectedOrderId}/delivery-status?adminUserId=${encodeURIComponent(adminUserId)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    const text = await res.text();
-    let message = "";
-    try {
-      const body = JSON.parse(text);
-      message = body.message || "";
-    } catch {
-      message = text;
-    }
-    if (!res.ok) {
-      await showMessage(message || "Delivery status update failed");
-      return;
-    }
-
-    await showMessage(message || "Delivery status updated");
-    await fetchOrders();
-    await fetchTripRecords();
-    await fetchMonitoring();
-  };
-
-  const onTripSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const adminUserId = localStorage.getItem("userId");
-    if (!adminUserId || !selectedOrderId) {
-      await showMessage("Please login again and select an order");
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      tripNumber: Number(tripForm.tripNumber),
-      status: tripForm.status,
-      remarks: tripForm.remarks,
-      transitMixerNumber: tripForm.transitMixerNumber,
-      driverName: tripForm.driverName,
-    };
-    if (tripForm.fuelUsedLiters.trim() !== "") payload.fuelUsedLiters = Number(tripForm.fuelUsedLiters);
-
-    const res = await fetch(
-      `${API}/orders/${selectedOrderId}/trips?adminUserId=${encodeURIComponent(adminUserId)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    const text = await res.text();
-    let message = "";
-    try {
-      const body = JSON.parse(text);
-      message = body.message || "";
-    } catch {
-      message = text;
-    }
-
-    if (!res.ok) {
-      await showMessage(message || "Failed to save trip record");
-      return;
-    }
-
-    await showMessage(message || "Trip saved successfully");
-    await fetchOrders();
-    await fetchTripRecords();
-    await fetchMonitoring();
-  };
-
   const onReschedule = async () => {
     if (!selectedOrderId) {
       await showMessage("Please select an order");
       return;
     }
     await send("/reschedule", { ...production, ...dispatch, ...vehicle, rescheduleReason });
+  };
+
+  const onMarkDelivered = async () => {
+    if (!selectedOrderId) {
+      await showMessage("Please select an order");
+      return;
+    }
+    if (automatedDeliveryStatus !== "DISPATCHED" && automatedDeliveryStatus !== "IN_TRANSIT") {
+      await showMessage("Order must be dispatched or in transit before marking delivered.");
+      return;
+    }
+    await send("/workflow-step", { step: "DELIVERED" });
   };
 
   return (
@@ -569,11 +558,13 @@ const AdminSchedule = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <form onSubmit={onProductionSubmit} className="bg-white rounded-2xl shadow-md p-6 space-y-3">
+          <form onSubmit={onProductionSubmit} className="order-1 bg-white rounded-2xl shadow-md p-6 space-y-3">
             <h2 className="text-lg font-semibold text-gray-800">Production Scheduling</h2>
             <input type="date" value={production.productionDate} onChange={(e) => setProduction({ ...production, productionDate: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <input type="datetime-local" value={production.productionSlotStart} onChange={(e) => setProduction({ ...production, productionSlotStart: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+            <p className="text-xs text-gray-500">Start time: {formatDateTimeWith12And24(production.productionSlotStart)}</p>
             <input type="datetime-local" value={production.productionSlotEnd} onChange={(e) => setProduction({ ...production, productionSlotEnd: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+            <p className="text-xs text-gray-500">End time: {formatDateTimeWith12And24(production.productionSlotEnd)}</p>
             <input type="text" placeholder="Plant allocation" value={production.plantAllocation} onChange={(e) => setProduction({ ...production, plantAllocation: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <select value={production.priorityLevel} onChange={(e) => setProduction({ ...production, priorityLevel: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md">
               <option value="NORMAL">Normal</option>
@@ -582,9 +573,41 @@ const AdminSchedule = () => {
             <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md">Save Production</button>
           </form>
 
-          <form onSubmit={onDispatchSubmit} className="bg-white rounded-2xl shadow-md p-6 space-y-3">
+          <form onSubmit={onDispatchSubmit} className="order-3 bg-white rounded-2xl shadow-md p-6 space-y-3">
             <h2 className="text-lg font-semibold text-gray-800">Dispatch Scheduling</h2>
+           
             <input type="datetime-local" value={dispatch.dispatchDateTime} onChange={(e) => setDispatch({ ...dispatch, dispatchDateTime: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+            <p className="text-xs text-gray-500">Dispatch time: {formatDateTimeWith12And24(dispatch.dispatchDateTime)}</p>
+            <input
+              type="number"
+              step="0.1"
+              min={1}
+              placeholder="Truck Capacity (m3)"
+              value={dispatch.truckCapacityM3}
+              onChange={(e) => setDispatch({ ...dispatch, truckCapacityM3: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                type="number"
+                min={10}
+                placeholder="Dispatch interval (minutes)"
+                value={dispatch.dispatchIntervalMinutes}
+                onChange={(e) => setDispatch({ ...dispatch, dispatchIntervalMinutes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <input
+                type="number"
+                min={10}
+                placeholder="Estimated travel (minutes)"
+                value={dispatch.estimatedTravelMinutes}
+                onChange={(e) => setDispatch({ ...dispatch, estimatedTravelMinutes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+            </div>
+            <button type="button" onClick={() => void calculateTripPlanPreview()} className="px-4 py-2 bg-blue-600 text-white rounded-md">
+              Calculate Trips
+            </button>
             <select value={dispatch.tripPlanning} onChange={(e) => setDispatch({ ...dispatch, tripPlanning: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md">
               <option value="SINGLE_TRIP">Single Trip</option>
               <option value="MULTIPLE_TRIPS">Multiple Trips</option>
@@ -599,10 +622,38 @@ const AdminSchedule = () => {
             />
             <input type="text" placeholder="Site-wise delivery sequence" value={dispatch.deliverySequence} onChange={(e) => setDispatch({ ...dispatch, deliverySequence: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <input type="datetime-local" value={dispatch.expectedArrivalTime} onChange={(e) => setDispatch({ ...dispatch, expectedArrivalTime: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
-            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md">Save Dispatch</button>
+            <p className="text-xs text-gray-500">ETA: {formatDateTimeWith12And24(dispatch.expectedArrivalTime)}</p>
+            {tripPlanPreview.length > 0 && (
+              <div className="border border-gray-200 rounded-md p-3 bg-gray-50 text-sm">
+                <p className="font-semibold text-gray-700 mb-2">Auto Trip Plan</p>
+                <select
+                  value={selectedTripPreview}
+                  onChange={(e) => setSelectedTripPreview(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                >
+                  {tripPlanPreview.map((trip) => (
+                    <option key={trip.tripNumber} value={String(trip.tripNumber)}>
+                      Trip {trip.tripNumber} ({trip.quantityM3} m3)
+                    </option>
+                  ))}
+                </select>
+                {selectedTripPlan && (
+                  <p className="mt-2 text-gray-600">
+                    Selected: Trip {selectedTripPlan.tripNumber} - {selectedTripPlan.quantityM3} m3
+                  </p>
+                )}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={!isVehicleAndDriverAssigned}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Save Dispatch
+            </button>
           </form>
 
-          <form onSubmit={onVehicleSubmit} className="bg-white rounded-2xl shadow-md p-6 space-y-3">
+          <form onSubmit={onVehicleSubmit} className="order-2 bg-white rounded-2xl shadow-md p-6 space-y-3">
             <h2 className="text-lg font-semibold text-gray-800">Vehicle & Driver</h2>
             <input
               type="text"
@@ -620,7 +671,15 @@ const AdminSchedule = () => {
               onChange={(e) => setVehicle({ ...vehicle, driverName: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
-            <input type="text" placeholder="Shift timing" value={vehicle.driverShift} onChange={(e) => setVehicle({ ...vehicle, driverShift: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+            <select
+              value={vehicle.driverShift}
+              onChange={(e) => setVehicle({ ...vehicle, driverShift: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            >
+              <option value="">Select shift timing</option>
+              <option value="MORNING">Morning</option>
+              <option value="EVENING">Evening</option>
+            </select>
             <input type="text" placeholder="Backup mixer (optional)" value={vehicle.backupTransitMixerNumber} onChange={(e) => setVehicle({ ...vehicle, backupTransitMixerNumber: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <input type="text" placeholder="Backup driver (optional)" value={vehicle.backupDriverName} onChange={(e) => setVehicle({ ...vehicle, backupDriverName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <button type="submit" className="px-4 py-2 bg-amber-600 text-white rounded-md">Assign Vehicle</button>
@@ -708,100 +767,51 @@ const AdminSchedule = () => {
           </div>
         </div>
 
-        <form onSubmit={onDeliveryStatusSubmit} className="bg-white rounded-2xl shadow-md p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-gray-800">Delivery Status Management</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select
-              value={deliveryStatusForm.deliveryStatus}
-              onChange={(e) => setDeliveryStatusForm({ ...deliveryStatusForm, deliveryStatus: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="SCHEDULED">Scheduled</option>
-              <option value="DISPATCHED">Dispatched</option>
-              <option value="IN_TRANSIT">In Transit</option>
-              <option value="DELIVERED">Delivered</option>
-            </select>
-            <input
-              type="number"
-              min={0}
-              placeholder="Delay in minutes"
-              value={deliveryStatusForm.delayInMinutes}
-              onChange={(e) => setDeliveryStatusForm({ ...deliveryStatusForm, delayInMinutes: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="text"
-              placeholder="Delay update message"
-              value={deliveryStatusForm.delayUpdateMessage}
-              onChange={(e) => setDeliveryStatusForm({ ...deliveryStatusForm, delayUpdateMessage: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
+        <div className="bg-white rounded-2xl shadow-md p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-gray-800">Delivery Status </h2>
+         
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-xs text-gray-500">Current Status</p>
+              <span className={`inline-flex mt-1 px-3 py-1 rounded-full text-xs font-semibold ${statusBadgeClass}`}>
+                {formatStatusLabel(automatedDeliveryStatus)}
+              </span>
+            </div>
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-xs text-gray-500">Delay</p>
+              <p className="text-sm font-medium text-gray-800">
+                {selectedOrder?.delayInMinutes != null ? `${selectedOrder.delayInMinutes} minutes` : "No delay"}
+              </p>
+            </div>
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-xs text-gray-500">Latest Update</p>
+              <p className="text-sm font-medium text-gray-800">{selectedOrder?.latestNotification || "-"}</p>
+            </div>
           </div>
-          <textarea
-            value={deliveryStatusForm.deliveryConfirmationDetails}
-            onChange={(e) => setDeliveryStatusForm({ ...deliveryStatusForm, deliveryConfirmationDetails: e.target.value })}
-            placeholder="Delivery confirmation details"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md min-h-20"
-          />
-          <button type="submit" className="px-4 py-2 bg-teal-600 text-white rounded-md">Update Delivery Status</button>
-        </form>
+          {automatedDeliveryStatus === "RETURNED" && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              Return reason: {selectedOrder?.returnReason || "-"} | Returned quantity:{" "}
+              {selectedOrder?.returnedQuantity != null ? `${selectedOrder.returnedQuantity} m3` : "-"}
+            </div>
+          )}
+          {(automatedDeliveryStatus === "DISPATCHED" || automatedDeliveryStatus === "IN_TRANSIT") && (
+            <div>
+              <button
+                type="button"
+                onClick={() => void onMarkDelivered()}
+                className="px-4 py-2 bg-green-600 text-white rounded-md"
+              >
+                Mark as Delivered
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-800">Trip Records and Fuel Usage</h2>
-
-          <form onSubmit={onTripSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input
-              type="number"
-              min={1}
-              placeholder="Trip number"
-              value={tripForm.tripNumber}
-              onChange={(e) => setTripForm({ ...tripForm, tripNumber: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <select
-              value={tripForm.status}
-              onChange={(e) => setTripForm({ ...tripForm, status: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="SCHEDULED">Scheduled</option>
-              <option value="DISPATCHED">Dispatched</option>
-              <option value="IN_TRANSIT">In Transit</option>
-              <option value="DELIVERED">Delivered</option>
-            </select>
-            <input
-              type="number"
-              step="0.01"
-              min={0}
-              placeholder="Fuel used (liters)"
-              value={tripForm.fuelUsedLiters}
-              onChange={(e) => setTripForm({ ...tripForm, fuelUsedLiters: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="text"
-              placeholder="Vehicle ID"
-              value={tripForm.transitMixerNumber}
-              onChange={(e) => setTripForm({ ...tripForm, transitMixerNumber: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="text"
-              placeholder="Driver name"
-              value={tripForm.driverName}
-              onChange={(e) => setTripForm({ ...tripForm, driverName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <input
-              type="text"
-              placeholder="Remarks"
-              value={tripForm.remarks}
-              onChange={(e) => setTripForm({ ...tripForm, remarks: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <button type="submit" className="md:col-span-3 px-4 py-2 bg-indigo-600 text-white rounded-md">
-              Save Trip Record
-            </button>
-          </form>
+          <h2 className="text-lg font-semibold text-gray-800">Trip Records</h2>
+          <p className="text-sm text-gray-600">
+            Trip records are auto-generated from the scheduling inputs above.
+          </p>
 
           <div className="overflow-x-auto border border-gray-200 rounded-xl">
             <table className="min-w-full text-sm text-left text-gray-700">
@@ -809,44 +819,42 @@ const AdminSchedule = () => {
                 <tr>
                   <th className="px-3 py-2">Trip</th>
                   <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Shift</th>
+                  <th className="px-3 py-2">Qty (m3)</th>
                   <th className="px-3 py-2">Vehicle</th>
                   <th className="px-3 py-2">Driver</th>
-                  <th className="px-3 py-2">Fuel (L)</th>
+                  <th className="px-3 py-2">Dispatch / ETA</th>
+                  <th className="px-3 py-2">Return</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {tripRecords.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-4 text-center text-gray-500">No trip records yet</td>
+                    <td colSpan={8} className="px-3 py-4 text-center text-gray-500">No trip records yet</td>
                   </tr>
                 )}
                 {tripRecords.map((trip, index) => (
                   <tr key={trip.id ?? index}>
                     <td className="px-3 py-2">{trip.tripNumber ?? "-"}</td>
                     <td className="px-3 py-2">{trip.status ?? "-"}</td>
+                    <td className="px-3 py-2">{trip.shift ?? "-"}</td>
+                    <td className="px-3 py-2">{trip.tripQuantityM3 ?? "-"}</td>
                     <td className="px-3 py-2">{trip.transitMixerNumber ?? "-"}</td>
                     <td className="px-3 py-2">{trip.driverName ?? "-"}</td>
-                    <td className="px-3 py-2">{trip.fuelUsedLiters ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      {formatDateTimeWith12And24(trip.scheduledDispatchTime)}
+                      <br />
+                      <span className="text-xs text-gray-500">
+                        ETA: {formatDateTimeWith12And24(trip.estimatedDeliveryTime)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      {trip.returnReason ? `${trip.returnReason} (${trip.returnedQuantity ?? "-"})` : "-"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-md p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Vehicle and Driver Monitoring</h2>
-          <div className="space-y-2 text-sm text-gray-700 max-h-64 overflow-auto">
-            {monitoringRecords.length === 0 && <p className="text-gray-500">No active dispatch monitoring data</p>}
-            {monitoringRecords.map((row) => (
-              <div key={row.orderId} className="border border-gray-200 rounded-lg p-3">
-                <p><span className="font-semibold">Order:</span> {row.orderId}</p>
-                <p><span className="font-semibold">Status:</span> {row.dispatchStatus || "-"}</p>
-                <p><span className="font-semibold">Vehicle / Driver:</span> {row.vehicleId || "-"} / {row.driverName || "-"}</p>
-                <p><span className="font-semibold">Trips:</span> {row.completedTrips ?? 0} / {row.plannedTrips ?? 1}</p>
-                <p><span className="font-semibold">Fuel Used:</span> {row.totalFuelUsedLiters ?? 0} L</p>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -884,22 +892,21 @@ const AdminSchedule = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm text-gray-700">
               <p><span className="font-semibold">Order:</span> {selectedOrder.orderId}</p>
               <p><span className="font-semibold">Status:</span> {selectedOrder.status}</p>
-              <p><span className="font-semibold">Payment Option:</span> {(selectedOrder.paymentOption || "-").replaceAll("_", " ")}</p>
-              <p><span className="font-semibold">Credit Status:</span> {(selectedOrder.creditApprovalStatus || "-").replaceAll("_", " ")}</p>
-              <p><span className="font-semibold">Credit Days:</span> {selectedOrder.creditDays ?? "-"}</p>
-              <p><span className="font-semibold">Credit Due Date:</span> {selectedOrder.creditDueDate || "-"}</p>
-              <p><span className="font-semibold">Delivery Status:</span> {selectedOrder.deliveryTrackingStatusLabel || "-"}</p>
+              <p><span className="font-semibold">Delivery Status:</span> {formatStatusLabel(automatedDeliveryStatus)}</p>
               <p><span className="font-semibold">Production Date:</span> {selectedOrder.productionDate || "-"}</p>
-              <p><span className="font-semibold">Production Slot:</span> {selectedOrder.productionSlotStart || "-"} to {selectedOrder.productionSlotEnd || "-"}</p>
+              <p>
+                <span className="font-semibold">Production Slot:</span>{" "}
+                {formatDateTimeWith12And24(selectedOrder.productionSlotStart)} to{" "}
+                {formatDateTimeWith12And24(selectedOrder.productionSlotEnd)}
+              </p>
               <p><span className="font-semibold">Plant:</span> {selectedOrder.plantAllocation || "-"}</p>
               <p><span className="font-semibold">Priority:</span> {selectedOrder.priorityLevel || "-"}</p>
-              <p><span className="font-semibold">Dispatch Time:</span> {selectedOrder.dispatchDateTime || "-"}</p>
+              <p><span className="font-semibold">Dispatch Time:</span> {formatDateTimeWith12And24(selectedOrder.dispatchDateTime)}</p>
               <p><span className="font-semibold">Trip Plan:</span> {selectedOrder.tripPlanning || "-"}</p>
               <p><span className="font-semibold">Planned Trips:</span> {selectedOrder.plannedTrips ?? 1}</p>
               <p><span className="font-semibold">Completed Trips:</span> {selectedOrder.completedTrips ?? 0}</p>
-              <p><span className="font-semibold">Fuel Used:</span> {selectedOrder.totalFuelUsedLiters ?? 0} L</p>
               <p><span className="font-semibold">Delivery Sequence:</span> {selectedOrder.deliverySequence || "-"}</p>
-              <p><span className="font-semibold">ETA:</span> {selectedOrder.expectedArrivalTime || "-"}</p>
+              <p><span className="font-semibold">ETA:</span> {formatDateTimeWith12And24(selectedOrder.expectedArrivalTime)}</p>
               <p><span className="font-semibold">Mixer:</span> {selectedOrder.transitMixerNumber || "-"}</p>
               <p><span className="font-semibold">Driver:</span> {selectedOrder.driverName || "-"} ({selectedOrder.driverShift || "-"})</p>
               <p><span className="font-semibold">Live Latitude:</span> {selectedOrder.liveLatitude ?? "-"}</p>
