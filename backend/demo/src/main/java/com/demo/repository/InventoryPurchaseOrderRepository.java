@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface InventoryPurchaseOrderRepository extends JpaRepository<InventoryPurchaseOrder, Long> {
     List<InventoryPurchaseOrder> findAllByOrderByCreatedAtDesc();
+    void deleteByRawMaterial_Id(Long rawMaterialId);
 }

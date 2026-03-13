@@ -10,6 +10,7 @@ import com.demo.repository.MixDesignRepository;
 import com.demo.repository.OrderRepository;
 import com.demo.repository.QualityInspectionRepository;
 import com.demo.repository.UserRepository;
+import com.demo.service.MixDesignCostService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -47,6 +48,9 @@ public class QualityController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private MixDesignCostService mixDesignCostService;
 
     @GetMapping("/my-orders/{userId}")
     public List<QualityAccessResponse> getQualityAccessForUser(@PathVariable Long userId) {
@@ -89,6 +93,34 @@ public class QualityController {
             rows.add(row);
         }
         return ResponseEntity.ok(rows);
+    }
+
+    @GetMapping("/admin/mix-design-cost/orders")
+    public ResponseEntity<?> getOrdersForMixDesignCost(@RequestParam(required = false) Long adminUserId) {
+        ResponseEntity<?> adminValidation = validateAdmin(adminUserId);
+        if (adminValidation != null) {
+            return adminValidation;
+        }
+        return ResponseEntity.ok(mixDesignCostService.getRelevantOrders());
+    }
+
+    @GetMapping("/admin/mix-design-cost/calculate")
+    public ResponseEntity<?> calculateMixDesignCost(
+            @RequestParam(required = false) Long adminUserId,
+            @RequestParam String orderId
+    ) {
+        ResponseEntity<?> adminValidation = validateAdmin(adminUserId);
+        if (adminValidation != null) {
+            return adminValidation;
+        }
+        if (orderId == null || orderId.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "orderId is required"));
+        }
+        try {
+            return ResponseEntity.ok(mixDesignCostService.calculateForOrder(orderId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
     @GetMapping("/admin/mix-designs")

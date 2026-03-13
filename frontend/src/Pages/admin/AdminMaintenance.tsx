@@ -423,7 +423,7 @@ const AdminMaintenance = () => {
       <main className="flex-1 p-8 space-y-6">
         <div className="bg-white rounded-2xl shadow-md p-6">
           <h1 className="text-2xl font-bold text-gray-800">Maintenance Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Preventive scheduling, breakdown handling, spare parts, and equipment performance tracking.</p>
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -582,7 +582,7 @@ const AdminMaintenance = () => {
 
         <div className="bg-white rounded-2xl shadow-md p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-1">Equipment Performance Monitoring (30 days)</h2>
-          <p className="text-sm text-gray-500 mb-4">Breakdown frequency, downtime, and maintenance cost insights.</p>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
             <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Machines</p><p className="text-xl font-bold">{performanceSummary.totalMachines}</p></div>
             <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Breakdowns</p><p className="text-xl font-bold">{performanceSummary.totalBreakdowns}</p></div>
