@@ -8,6 +8,7 @@ import com.demo.repository.InventoryPurchaseOrderRepository;
 import com.demo.repository.RawMaterialRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -33,7 +34,9 @@ public class InventoryController {
 
     @GetMapping("/materials")
     public List<RawMaterial> getMaterials() {
-        ensureDefaultMaterials();
+        if (rawMaterialRepository.count() == 0) {
+            ensureDefaultMaterials();
+        }
         return rawMaterialRepository.findAll();
     }
 
@@ -92,6 +95,25 @@ public class InventoryController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("message", "Unable to update material"));
+        }
+    }
+
+    @DeleteMapping("/materials/{id}")
+    @Transactional
+    public ResponseEntity<?> deleteMaterial(@PathVariable Long id) {
+        try {
+            RawMaterial material = rawMaterialRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Material not found"));
+
+            inventoryMovementRepository.deleteByRawMaterial_Id(id);
+            inventoryPurchaseOrderRepository.deleteByRawMaterial_Id(id);
+            rawMaterialRepository.delete(material);
+
+            return ResponseEntity.ok(Map.of("message", "Material deleted successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "Unable to delete material"));
         }
     }
 
@@ -299,25 +321,8 @@ public class InventoryController {
                 Map.of("name", "Water", "unit", "litre", "supplier", "Plant Water Unit", "price", 0.5d, "reorder", 10000d, "imageUrl", "https://images.unsplash.com/photo-1495774539583-885e02cca8c2?auto=format&fit=crop&w=1200&q=80")
         );
         for (Map<String, Object> row : defaults) {
-            String name = String.valueOf(row.get("name"));
-            Optional<RawMaterial> existing = rawMaterialRepository.findByNameIgnoreCase(name);
-            if (existing.isPresent()) {
-                RawMaterial material = existing.get();
-                if (material.getImageUrl() == null || material.getImageUrl().isBlank()) {
-                    material.setImageUrl(String.valueOf(row.get("imageUrl")));
-                }
-                if (material.getPricePerUnit() <= 0) {
-                    material.setPricePerUnit((Double) row.get("price"));
-                }
-                if (material.getQuantity() <= 0) {
-                    material.setQuantity(10);
-                }
-                material.setUpdatedAt(LocalDateTime.now());
-                rawMaterialRepository.save(material);
-                continue;
-            }
             RawMaterial material = new RawMaterial();
-            material.setName(name);
+            material.setName(String.valueOf(row.get("name")));
             material.setQuantity(10);
             material.setReorderLevel((Double) row.get("reorder"));
             material.setSupplier(String.valueOf(row.get("supplier")));

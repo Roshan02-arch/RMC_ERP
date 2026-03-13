@@ -83,7 +83,6 @@ const AdminSchedule = () => {
     truckCapacityM3: "6",
     estimatedTravelMinutes: "90",
     dispatchIntervalMinutes: "60",
-    deliverySequence: "",
     expectedArrivalTime: "",
   });
 
@@ -620,7 +619,6 @@ const AdminSchedule = () => {
               placeholder="Planned trips"
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
-            <input type="text" placeholder="Site-wise delivery sequence" value={dispatch.deliverySequence} onChange={(e) => setDispatch({ ...dispatch, deliverySequence: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <input type="datetime-local" value={dispatch.expectedArrivalTime} onChange={(e) => setDispatch({ ...dispatch, expectedArrivalTime: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
             <p className="text-xs text-gray-500">ETA: {formatDateTimeWith12And24(dispatch.expectedArrivalTime)}</p>
             {tripPlanPreview.length > 0 && (
@@ -716,9 +714,7 @@ const AdminSchedule = () => {
 
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-800">Transit Mixer Availability</h2>
-          <p className="text-sm text-gray-600">
-            Availability is checked using selected order dispatch time and ETA.
-          </p>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <button
               type="button"
@@ -809,9 +805,7 @@ const AdminSchedule = () => {
 
         <div className="bg-white rounded-2xl shadow-md p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-800">Trip Records</h2>
-          <p className="text-sm text-gray-600">
-            Trip records are auto-generated from the scheduling inputs above.
-          </p>
+
 
           <div className="overflow-x-auto border border-gray-200 rounded-xl">
             <table className="min-w-full text-sm text-left text-gray-700">

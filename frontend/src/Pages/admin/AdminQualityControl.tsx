@@ -7,7 +7,12 @@ type OrderRow = {
   orderId: string;
   grade: string;
   status: string;
+  quantity: number;
   customerName?: string | null;
+  customerEmail?: string | null;
+  deliveryDate?: string | null;
+  scheduledDate?: string | null;
+  address?: string | null;
   latestInspection?: {
     id: number;
     inspectionNumber: string;
@@ -61,6 +66,35 @@ type Inspection = {
   recordedAt?: string | null;
 };
 
+type MixCostIngredient = {
+  ingredient: string;
+  unit: string;
+  rate: number;
+  quantityPerM3: number;
+  costPerM3: number;
+  quantityForOrder: number;
+  costForOrder: number;
+};
+
+type MixCostCalculation = {
+  order: OrderRow;
+  sheet: {
+    gradeCode: string;
+    gradeLabel: string;
+  };
+  ingredients: MixCostIngredient[];
+  summary: {
+    totalDensity: number;
+    costPerM3: number;
+    totalCostForOrder: number;
+    orderQuantity: number;
+    sandQuantityPerM3: number;
+    sandCostPerM3: number;
+    aggregateQuantityPerM3: number;
+    aggregateCostPerM3: number;
+  };
+};
+
 const API = "http://localhost:8080/api/quality";
 
 const numberFieldClass = "w-full px-3 py-2 border border-gray-300 rounded-md text-sm";
@@ -100,6 +134,9 @@ const AdminQualityControl = () => {
 
   const [statusMessage, setStatusMessage] = useState("");
   const [statusError, setStatusError] = useState(false);
+  const [mixCostCalculation, setMixCostCalculation] = useState<MixCostCalculation | null>(null);
+  const [mixCostLoading, setMixCostLoading] = useState(false);
+  const [mixCostError, setMixCostError] = useState("");
 
   const approvedMixDesigns = useMemo(
     () => mixDesigns.filter((mix) => mix.approved),
@@ -135,15 +172,27 @@ const AdminQualityControl = () => {
 
   useEffect(() => {
     if (!selectedOrder) {
+      setSelectedMixDesignId("");
+      setMixCostCalculation(null);
+      setMixCostError("");
       return;
     }
     const gradeBased = approvedMixDesigns.find((mix) => mix.grade === selectedOrder.grade);
     if (gradeBased) {
       setSelectedMixDesignId(gradeBased.mixDesignId);
-    } else if (approvedMixDesigns.length > 0) {
-      setSelectedMixDesignId(approvedMixDesigns[0].mixDesignId);
+    } else {
+      setSelectedMixDesignId("");
     }
   }, [approvedMixDesigns, selectedOrder]);
+
+  useEffect(() => {
+    if (!selectedOrderId) {
+      setMixCostCalculation(null);
+      setMixCostError("");
+      return;
+    }
+    void loadMixCostCalculation(selectedOrderId);
+  }, [selectedOrderId]);
 
   const setMessage = (message: string, error = false) => {
     setStatusMessage(message);
@@ -155,9 +204,10 @@ const AdminQualityControl = () => {
   };
 
   const loadOrders = async () => {
-    const res = await fetch(`${API}/admin/orders?adminUserId=${encodeURIComponent(adminUserId)}`);
+    const res = await fetch(`${API}/admin/mix-design-cost/orders?adminUserId=${encodeURIComponent(adminUserId)}`);
     const data: unknown = await res.json();
-    setOrders(Array.isArray(data) ? (data as OrderRow[]) : []);
+    const items = Array.isArray(data) ? (data as OrderRow[]) : [];
+    setOrders(items);
   };
 
   const loadMixDesigns = async () => {
@@ -177,6 +227,35 @@ const AdminQualityControl = () => {
   const parseNumber = (value: string) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const formatMoney = (value: number) =>
+    `Rs.${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const formatQuantity = (value: number) =>
+    value.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+  const loadMixCostCalculation = async (orderId: string) => {
+    setMixCostLoading(true);
+    setMixCostError("");
+    try {
+      const res = await fetch(
+        `${API}/admin/mix-design-cost/calculate?adminUserId=${encodeURIComponent(adminUserId)}&orderId=${encodeURIComponent(orderId)}`
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setMixCostCalculation(null);
+        setMixCostError(data?.message || "Unable to calculate mix design cost right now.");
+        return;
+      }
+      setMixCostCalculation(data as MixCostCalculation);
+    } catch (error) {
+      console.error("Failed to load mix design cost calculation", error);
+      setMixCostCalculation(null);
+      setMixCostError("Unable to calculate mix design cost right now.");
+    } finally {
+      setMixCostLoading(false);
+    }
   };
 
   const onCreateMixDesign = async (event: FormEvent) => {
@@ -366,9 +445,7 @@ const AdminQualityControl = () => {
       <main className="flex-1 p-8 space-y-6">
         <div className="bg-white rounded-2xl shadow-md p-6">
           <h1 className="text-2xl font-bold text-gray-800">Quality Control Management</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Mix design approval, slump and cube test recording, and quality certificate generation.
-          </p>
+
         </div>
 
         {statusMessage && (
@@ -391,6 +468,144 @@ const AdminQualityControl = () => {
             <p className="text-2xl font-bold text-indigo-700 mt-1">{qualitySummary.certificates}</p>
           </div>
         </div>
+
+        <section className="bg-white rounded-2xl shadow-md p-6 space-y-5">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-semibold text-gray-800">Automatic Mix Design Cost Calculation</h2>
+            <p className="text-sm text-gray-500">
+              Select an approved or active order to automatically load the SSD mix design cost sheet for its concrete grade.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-1">
+              <label className="block text-xs font-medium text-gray-600 mb-2">Select Order</label>
+              <select
+                value={selectedOrderId}
+                onChange={(e) => setSelectedOrderId(e.target.value)}
+                className={numberFieldClass}
+              >
+                <option value="">Select Order</option>
+                {orders.map((order) => (
+                  <option key={order.id} value={order.orderId}>
+                    {order.orderId} - {order.grade || "Grade Missing"} - {formatQuantity(order.quantity)} m3
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Order ID</p>
+                <p className="mt-2 text-base font-semibold text-gray-800">{selectedOrder?.orderId || "-"}</p>
+                <p className="mt-1 text-xs text-gray-500">{selectedOrder?.status || "Select an order"}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Concrete Grade</p>
+                <p className="mt-2 text-base font-semibold text-gray-800">{selectedOrder?.grade || "-"}</p>
+                <p className="mt-1 text-xs text-gray-500">Mapped from selected order</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Order Quantity</p>
+                <p className="mt-2 text-base font-semibold text-gray-800">
+                  {selectedOrder ? `${formatQuantity(selectedOrder.quantity)} m3` : "-"}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">{selectedOrder?.customerName || "Customer preview"}</p>
+              </div>
+            </div>
+          </div>
+
+          {!selectedOrderId && (
+            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+              Select an order to view ingredient-wise mix quantities, rates, cost per m3, and total order cost.
+            </div>
+          )}
+
+          {selectedOrderId && mixCostLoading && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-6 text-sm text-blue-700">
+              Loading mix design cost calculation...
+            </div>
+          )}
+
+          {selectedOrderId && mixCostError && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+              {mixCostError}
+            </div>
+          )}
+
+          {mixCostCalculation && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-emerald-700">Cost Per m3</p>
+                  <p className="mt-2 text-xl font-bold text-emerald-800">{formatMoney(mixCostCalculation.summary.costPerM3)}</p>
+                </div>
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-cyan-700">Total Density</p>
+                  <p className="mt-2 text-xl font-bold text-cyan-800">{formatQuantity(mixCostCalculation.summary.totalDensity)} kg/m3</p>
+                </div>
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-indigo-700">Sand Total</p>
+                  <p className="mt-2 text-xl font-bold text-indigo-800">{formatQuantity(mixCostCalculation.summary.sandQuantityPerM3)} kg</p>
+                  <p className="mt-1 text-xs text-indigo-700">{formatMoney(mixCostCalculation.summary.sandCostPerM3)} per m3</p>
+                </div>
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-violet-700">Aggregate Total</p>
+                  <p className="mt-2 text-xl font-bold text-violet-800">{formatQuantity(mixCostCalculation.summary.aggregateQuantityPerM3)} kg</p>
+                  <p className="mt-1 text-xs text-violet-700">{formatMoney(mixCostCalculation.summary.aggregateCostPerM3)} per m3</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-gray-200">
+                <table className="min-w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3">Ingredient</th>
+                      <th className="px-4 py-3">Rate</th>
+                      <th className="px-4 py-3">Qty / m3</th>
+                      <th className="px-4 py-3">Cost / m3</th>
+                      <th className="px-4 py-3">Qty for Order</th>
+                      <th className="px-4 py-3">Cost for Order</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {mixCostCalculation.ingredients.map((row) => (
+                      <tr key={row.ingredient}>
+                        <td className="px-4 py-3 font-medium text-gray-800">{row.ingredient}</td>
+                        <td className="px-4 py-3">{formatMoney(row.rate)}</td>
+                        <td className="px-4 py-3">{formatQuantity(row.quantityPerM3)} {row.unit}</td>
+                        <td className="px-4 py-3">{formatMoney(row.costPerM3)}</td>
+                        <td className="px-4 py-3">{formatQuantity(row.quantityForOrder)} {row.unit}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{formatMoney(row.costForOrder)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Mix Design Grade</p>
+                  <p className="mt-2 text-base font-semibold text-gray-800">{mixCostCalculation.sheet.gradeLabel}</p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Ordered Quantity</p>
+                  <p className="mt-2 text-base font-semibold text-gray-800">{formatQuantity(mixCostCalculation.summary.orderQuantity)} m3</p>
+                </div>
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="text-xs uppercase tracking-wide text-rose-700">Total Cost For Order</p>
+                  <p className="mt-2 text-xl font-bold text-rose-800">{formatMoney(mixCostCalculation.summary.totalCostForOrder)}</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p><span className="font-semibold">Customer:</span> {mixCostCalculation.order.customerName || "-"}</p>
+                <p><span className="font-semibold">Address:</span> {mixCostCalculation.order.address || "-"}</p>
+                <p><span className="font-semibold">Scheduled Date:</span> {mixCostCalculation.order.scheduledDate ? new Date(mixCostCalculation.order.scheduledDate).toLocaleString() : "-"}</p>
+              </div>
+            </div>
+          )}
+        </section>
 
         <section className="bg-white rounded-2xl shadow-md p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Mix Design Management</h2>
@@ -569,19 +784,6 @@ const AdminQualityControl = () => {
 
           <form onSubmit={onRecordInspection} className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <select
-              value={selectedOrderId}
-              onChange={(e) => setSelectedOrderId(e.target.value)}
-              className={numberFieldClass}
-            >
-              <option value="">Select Order</option>
-              {orders.map((order) => (
-                <option key={order.id} value={order.orderId}>
-                  {order.orderId} - {order.grade} - {order.status}
-                </option>
-              ))}
-            </select>
-
-            <select
               value={selectedMixDesignId}
               onChange={(e) => setSelectedMixDesignId(e.target.value)}
               className={numberFieldClass}
@@ -638,6 +840,18 @@ const AdminQualityControl = () => {
               Record QC Result
             </button>
           </form>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+              Selected order: <span className="font-semibold">{selectedOrder?.orderId || "-"}</span>
+              {" "}({selectedOrder?.grade || "Grade missing"}) for {selectedOrder?.customerName || "-"}
+            </div>
+            <div className={`rounded-lg border px-4 py-3 text-sm ${selectedMixDesignId ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+              {selectedMixDesignId
+                ? `Approved mix design linked: ${selectedMixDesignId}`
+                : "No approved mix design is available for the selected order grade."}
+            </div>
+          </div>
         </section>
 
         <section className="bg-white rounded-2xl shadow-md p-6">
@@ -697,12 +911,6 @@ const AdminQualityControl = () => {
               </tbody>
             </table>
           </div>
-
-          {selectedOrder && (
-            <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-              Selected order: <span className="font-semibold">{selectedOrder.orderId}</span> ({selectedOrder.grade}) for customer {selectedOrder.customerName || "-"}
-            </div>
-          )}
         </section>
       </main>
     </div>

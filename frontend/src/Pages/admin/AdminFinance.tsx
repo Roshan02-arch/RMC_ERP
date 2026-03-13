@@ -417,7 +417,7 @@ const AdminFinance = () => {
       <main className="flex-1 p-8 space-y-6">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6">
           <h1 className="text-2xl font-bold text-gray-800">Finance and Accounting</h1>
-          <p className="text-sm text-gray-500 mt-1">Professional finance dashboard with payment completion, delivery completion, detailed reports and downloadable statements.</p>
+
         </div>
 
         <div className="bg-white rounded-2xl shadow-md p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -458,7 +458,7 @@ const AdminFinance = () => {
               <p><span className="inline-block w-2.5 h-2.5 bg-teal-700 rounded-full mr-2" />Collected: <b>{inr(totalPaidAll)}</b></p>
               <p><span className="inline-block w-2.5 h-2.5 bg-slate-300 rounded-full mr-2" />Outstanding: <b>{inr(totalOutstandingAll)}</b></p>
               <p>Total Payable: <b>{inr(totalPayableAll)}</b></p>
-              <p className="text-xs text-gray-500 mt-1">This pie chart shows completed payment share vs remaining outstanding.</p>
+
             </div>
           </div>
         </div>
@@ -542,7 +542,7 @@ const AdminFinance = () => {
 
           <div className="bg-white rounded-2xl shadow-md p-6 space-y-3">
             <h2 className="text-lg font-semibold text-gray-800">Weekly / Monthly / Yearly Reports</h2>
-            <p className="text-xs text-gray-500">Weekly breakdown means total completed payment collection grouped by ISO week (example: 2026-W11).</p>
+
             <div className="grid grid-cols-1 gap-4">
               {(["WEEKLY", "MONTHLY", "YEARLY"] as Mode[]).map((reportMode) => {
                 const rowsForMode = modeRowsMap[reportMode] || [];
@@ -610,9 +610,27 @@ const AdminFinance = () => {
               })}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input type="number" value={materialCostPerM3} onChange={(e) => setMaterialCostPerM3(Number(e.target.value) || 0)} className="px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Material/m3" />
-              <input type="number" value={productionCostPerM3} onChange={(e) => setProductionCostPerM3(Number(e.target.value) || 0)} className="px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Production/m3" />
-              <input type="number" value={transportCostPerM3} onChange={(e) => setTransportCostPerM3(Number(e.target.value) || 0)} className="px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Transport/m3" />
+              <input
+                type="number"
+                value={materialCostPerM3 === 0 ? "" : materialCostPerM3}
+                onChange={(e) => setMaterialCostPerM3(Number(e.target.value) || 0)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                placeholder="Enter material cost per m3"
+              />
+              <input
+                type="number"
+                value={productionCostPerM3 === 0 ? "" : productionCostPerM3}
+                onChange={(e) => setProductionCostPerM3(Number(e.target.value) || 0)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                placeholder="Enter production cost per m3"
+              />
+              <input
+                type="number"
+                value={transportCostPerM3 === 0 ? "" : transportCostPerM3}
+                onChange={(e) => setTransportCostPerM3(Number(e.target.value) || 0)}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                placeholder="Enter transport cost per m3"
+              />
             </div>
           </div>
         </div>

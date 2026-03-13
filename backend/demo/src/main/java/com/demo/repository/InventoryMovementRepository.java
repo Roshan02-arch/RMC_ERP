@@ -10,4 +10,5 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
     List<InventoryMovement> findByCreatedAtBetweenOrderByCreatedAtDesc(LocalDateTime start, LocalDateTime end);
     List<InventoryMovement> findByRawMaterial_IdAndCreatedAtBetweenOrderByCreatedAtDesc(Long rawMaterialId, LocalDateTime start, LocalDateTime end);
     List<InventoryMovement> findByRawMaterial_IdOrderByCreatedAtDesc(Long rawMaterialId);
+    void deleteByRawMaterial_Id(Long rawMaterialId);
 }

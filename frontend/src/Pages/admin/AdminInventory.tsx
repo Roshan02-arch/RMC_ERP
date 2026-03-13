@@ -98,6 +98,7 @@ const AdminInventory = () => {
   });
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [editingMaterialId, setEditingMaterialId] = useState<number | null>(null);
+  const [deletingMaterialId, setDeletingMaterialId] = useState<number | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
 
@@ -188,6 +189,31 @@ const AdminInventory = () => {
       return;
     }
     await fetchAll(period);
+  };
+
+  const deleteMaterial = async (material: RawMaterial) => {
+    const confirmed = await showConfirm(
+      `Delete material ${material.name}?`,
+      "Confirm Delete",
+      "Delete"
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingMaterialId(material.id);
+      const res = await fetch(`${API}/materials/${material.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        await showMessage(data?.message || `Unable to delete material (HTTP ${res.status})`);
+        return;
+      }
+      await fetchAll(period);
+      await showMessage(data?.message || "Material deleted successfully");
+    } finally {
+      setDeletingMaterialId(null);
+    }
   };
 
   const createPurchaseOrder = async (material: RawMaterial) => {
@@ -564,9 +590,7 @@ const AdminInventory = () => {
       <main className="flex-1 p-8 space-y-6">
         <div className="bg-white rounded-2xl shadow-md p-6">
           <h1 className="text-2xl font-bold text-gray-800">Inventory Management</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage raw materials, monitor stock, reorder alerts, and consumption reports.
-          </p>
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -767,7 +791,13 @@ const AdminInventory = () => {
                           {editingMaterialId === m.id ? "Editing..." : "Edit"}
                         </button>
                         <button onClick={() => adjustStock(m, "restock")} className="px-3 py-1 text-xs bg-green-600 text-white rounded-md">Restock</button>
-                        <button onClick={() => adjustStock(m, "consume")} className="px-3 py-1 text-xs bg-amber-600 text-white rounded-md">Consume</button>
+                        <button
+                          onClick={() => deleteMaterial(m)}
+                          disabled={deletingMaterialId === m.id}
+                          className="px-3 py-1 text-xs bg-red-600 text-white rounded-md disabled:opacity-60"
+                        >
+                          {deletingMaterialId === m.id ? "Deleting..." : "Delete"}
+                        </button>
                         <button onClick={() => createPurchaseOrder(m)} className="px-3 py-1 text-xs bg-indigo-600 text-white rounded-md">Reorder</button>
                       </div>
                     </td>
@@ -830,9 +860,7 @@ const AdminInventory = () => {
               </button>
             </div>
           </div>
-          <p className="text-xs text-gray-500 mb-4">
-            Download includes period-wise stock summary and movement dates as per placed updates/orders.
-          </p>
+
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
