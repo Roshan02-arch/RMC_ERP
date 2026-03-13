@@ -8,11 +8,18 @@ const OrderSuccess = () => {
     paymentId?: string;
     selectedOrderId?: string;
     selectedRawOrderId?: number;
+    title?: string;
+    subtitle?: string;
+    orderStatusLabel?: string;
+    hideBillingButton?: boolean;
   } | null) || null;
   const paymentRef = String(state?.paymentId || "").toUpperCase();
   const isCodPayment = paymentRef.includes("COD");
   const paymentStatusLabel = isCodPayment ? "Pending" : "Successful";
   const paymentStatusClass = isCodPayment ? "text-amber-600" : "text-emerald-700";
+  const title = state?.title || "Congratulations";
+  const subtitle = state?.subtitle || "Your order has been successfully placed.";
+  const orderStatusLabel = state?.orderStatusLabel || "Confirmed";
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f3f4f6_0%,#e5e7eb_100%)] flex items-center justify-center px-4">
@@ -21,14 +28,14 @@ const OrderSuccess = () => {
           <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-4xl font-bold">
             ✓
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mt-4">Congratulations</h1>
-          <p className="mt-2 text-gray-700 text-lg">Your order has been successfully placed.</p>
+          <h1 className="text-3xl font-bold text-gray-900 mt-4">{title}</h1>
+          <p className="mt-2 text-gray-700 text-lg">{subtitle}</p>
         </div>
 
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wide">Order Status</p>
-            <p className="mt-1 text-lg font-semibold text-emerald-700">Confirmed</p>
+            <p className="mt-1 text-lg font-semibold text-emerald-700">{orderStatusLabel}</p>
           </div>
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <p className="text-xs text-gray-500 uppercase tracking-wide">Payment Status</p>
@@ -48,20 +55,22 @@ const OrderSuccess = () => {
         )}
 
         <div className="mt-8 flex flex-wrap gap-3 justify-center">
-          <button
-            onClick={() =>
-              navigate("/billing-payment", {
-                state: {
-                  selectedOrderId: state?.selectedOrderId || state?.orderId || "",
-                  selectedRawOrderId: state?.selectedRawOrderId,
-                  successMessage: "Order placed successfully. Invoice opened for this order.",
-                },
-              })
-            }
-            className="px-5 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold"
-          >
-            Billing and Invoice
-          </button>
+          {!state?.hideBillingButton && (
+            <button
+              onClick={() =>
+                navigate("/billing-payment", {
+                  state: {
+                    selectedOrderId: state?.selectedOrderId || state?.orderId || "",
+                    selectedRawOrderId: state?.selectedRawOrderId,
+                    successMessage: "Order placed successfully. Invoice opened for this order.",
+                  },
+                })
+              }
+              className="px-5 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+            >
+              Billing and Invoice
+            </button>
+          )}
           <button
             onClick={() =>
               navigate("/delivery-tracking", {

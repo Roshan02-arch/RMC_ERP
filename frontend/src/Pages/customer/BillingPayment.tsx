@@ -13,6 +13,11 @@ type Order = {
   deliveryDate?: string;
   expectedArrivalTime?: string;
   address?: string;
+  paymentOption?: string;
+  creditDays?: number;
+  creditApprovalStatus?: string;
+  creditDueDate?: string;
+  creditReviewRemark?: string;
 };
 
 type PaymentRecord = {
@@ -510,6 +515,19 @@ const BillingPayment = () => {
                 <p className="text-sm"><strong>Phone:</strong> {customerPhone}</p>
                 <p className="text-sm"><strong>Address:</strong> {selectedRawOrder?.address || customerAddress}</p>
                 <p className="text-sm mt-2"><strong>Payment Status:</strong> {paymentStatus.replaceAll("_", " ")}</p>
+                {selectedOrder && String(selectedOrder.paymentOption || "").toUpperCase() === "PAY_LATER" && (
+                  <>
+                    <p className="text-sm"><strong>Payment Option:</strong> Pay Later</p>
+                    <p className="text-sm"><strong>Credit Status:</strong> {(selectedOrder.creditApprovalStatus || "PENDING").replaceAll("_", " ")}</p>
+                    <p className="text-sm"><strong>Credit Due Date:</strong> {selectedOrder.creditDueDate || "-"}</p>
+                    <p className="text-sm"><strong>Admin Remark:</strong> {selectedOrder.creditReviewRemark || "-"}</p>
+                  </>
+                )}
+                {selectedOrder && String(selectedOrder.creditApprovalStatus || "").toUpperCase() === "REJECTED" && (
+                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    Admin rejected this credit request. Complete payment to continue this order.
+                  </div>
+                )}
               </div>
             </section>
           </>

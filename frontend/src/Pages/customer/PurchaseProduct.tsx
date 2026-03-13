@@ -19,6 +19,9 @@ interface ConcreteOrder {
   quantity: number;
   totalPrice: number;
   status: OrderStatus;
+  paymentOption?: string;
+  creditApprovalStatus?: string;
+  creditDays?: number;
 }
 
 type ProductStock = {
@@ -529,6 +532,13 @@ const PurchaseProduct = () => {
                 <p className="text-sm"><strong>Product:</strong> {order.grade}</p>
                 <p className="text-sm"><strong>Quantity:</strong> {order.quantity} m3</p>
                 <p className="text-sm"><strong>Total:</strong> Rs.{order.totalPrice}</p>
+                <p className="text-sm"><strong>Status:</strong> {order.status.replaceAll("_", " ")}</p>
+                {String(order.paymentOption || "").toUpperCase() === "PAY_LATER" && (
+                  <p className="text-sm">
+                    <strong>Credit:</strong> {(order.creditApprovalStatus || "PENDING").replaceAll("_", " ")}
+                    {order.creditDays ? ` (${order.creditDays} days)` : ""}
+                  </p>
+                )}
                 <button
                   onClick={() => deleteConcreteOrder(order)}
                   disabled={deletingOrderId === order.id}
