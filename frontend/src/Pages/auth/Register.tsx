@@ -787,7 +787,7 @@ function QuantumBackground() {
     const pointer = new THREE.Vector2();
     const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     const interactionPoint = new THREE.Vector3();
-    const clock = new THREE.Clock();
+    const timer = new THREE.Timer();
     let lastPulseIndex = 0;
     let animationId = 0;
 
@@ -801,7 +801,8 @@ function QuantumBackground() {
         -interactionPlane.normal.dot(camera.position) + camera.position.length() * 0.5;
 
       if (raycaster.ray.intersectPlane(interactionPlane, interactionPoint)) {
-        const time = clock.getElapsedTime();
+        timer.update();
+        const time = timer.getElapsed();
 
         if (nodesMesh && connectionsMesh) {
           lastPulseIndex = (lastPulseIndex + 1) % 3;
@@ -851,7 +852,8 @@ function QuantumBackground() {
 
     function animate() {
       animationId = requestAnimationFrame(animate);
-      const t = clock.getElapsedTime();
+      timer.update();
+      const t = timer.getElapsed();
 
       if (nodesMesh) {
         nodesMesh.material.uniforms.uTime.value = t;

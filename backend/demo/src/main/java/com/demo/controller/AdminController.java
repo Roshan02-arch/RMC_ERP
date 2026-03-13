@@ -12,6 +12,7 @@ import com.demo.entity.DispatchTripStatus;
 import com.demo.entity.Driver;
 import com.demo.entity.NotificationType;
 import com.demo.entity.Order;
+import com.demo.entity.OrderApprovalHistory;
 import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
 import com.demo.entity.PaymentRecord;
@@ -19,6 +20,7 @@ import com.demo.entity.TransitMixer;
 import com.demo.entity.User;
 import com.demo.repository.DispatchTripRecordRepository;
 import com.demo.repository.DriverRepository;
+import com.demo.repository.OrderApprovalHistoryRepository;
 import com.demo.repository.OrderAssignmentRepository;
 import com.demo.repository.OrderRepository;
 import com.demo.repository.PaymentRecordRepository;
@@ -72,6 +74,9 @@ public class AdminController {
     @Autowired
     private OrderNotificationService orderNotificationService;
 
+    @Autowired
+    private OrderApprovalHistoryRepository approvalHistoryRepository;
+
 
     // ? 1. Get All Orders
     @GetMapping("/orders")
@@ -89,6 +94,29 @@ public class AdminController {
         List<Map<String, Object>> response = new ArrayList<>();
         for (Order order : orderRepository.findByStatus(OrderStatus.PENDING_APPROVAL)) {
             response.add(toOrderView(order));
+        }
+        return response;
+    }
+
+    @GetMapping("/pending-orders")
+    public List<Map<String, Object>> getPendingOrdersForApprovalPage() {
+        return getPendingOrders();
+    }
+
+    @GetMapping("/pending-credit-orders")
+    public List<Map<String, Object>> getPendingCreditOrdersForApprovalPage() {
+        List<Map<String, Object>> response = new ArrayList<>();
+        for (Order order : orderRepository.findAll()) {
+            String paymentType = normalizeUpper(order.getPaymentType());
+            String paymentOption = normalizeUpper(order.getPaymentOption());
+            String creditApprovalStatus = normalizeUpper(order.getCreditApprovalStatus());
+
+            boolean isPayLater = "PAY_LATER".equals(paymentType) || "PAY_LATER".equals(paymentOption);
+            boolean isPendingCredit = "PENDING_APPROVAL".equals(creditApprovalStatus) || "PENDING".equals(creditApprovalStatus);
+
+            if (isPayLater && isPendingCredit) {
+                response.add(toOrderView(order));
+            }
         }
         return response;
     }
@@ -389,6 +417,7 @@ public class AdminController {
 
         order.setStatus(OrderStatus.APPROVED);
         order.setApprovedAt(LocalDateTime.now());
+        order.setOrderWorkflowStatus("APPROVED");
         order.setDeliveryTrackingStatus(null);
         order.setDeliveredAt(null);
         order.setReturnReason(null);
@@ -396,10 +425,25 @@ public class AdminController {
         order.setLatestNotification("Order approved");
 
         orderRepository.save(order);
+
+        approvalHistoryRepository.save(new OrderApprovalHistory(
+                order.getOrderId(),
+                "APPROVED",
+                "Admin",
+                LocalDateTime.now(),
+                "Order approved by admin."
+        ));
+
         orderNotificationService.createNotification(order, NotificationType.ORDER_APPROVED);
 
         return ResponseEntity.ok("Order Approved");
     }
+
+    @PostMapping("/order/approve/{orderId}")
+    public ResponseEntity<?> approveOrderPost(@PathVariable String orderId) {
+        return approveOrder(orderId);
+    }
+
     @PutMapping("/orders/{orderId}/reject")
     public ResponseEntity<?> rejectOrder(@PathVariable String orderId) {
 
@@ -407,15 +451,148 @@ public class AdminController {
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
         order.setStatus(OrderStatus.REJECTED);
+        order.setOrderWorkflowStatus("REJECTED");
         order.setDeliveryTrackingStatus(null);
         order.setDeliveredAt(null);
         order.setReturnReason(null);
         order.setReturnedQuantity(null);
         order.setLatestNotification("Order rejected");
         orderRepository.save(order);
+
+        approvalHistoryRepository.save(new OrderApprovalHistory(
+                order.getOrderId(),
+                "REJECTED",
+                "Admin",
+                LocalDateTime.now(),
+                "Order rejected by admin."
+        ));
+
         orderNotificationService.logOrderUpdate(order, resolveTrackingStatus(order), order.getLatestNotification());
 
         return ResponseEntity.ok("Order Rejected");
+    }
+
+    @PostMapping("/order/reject/{orderId}")
+    public ResponseEntity<?> rejectOrderPost(@PathVariable String orderId) {
+        return rejectOrder(orderId);
+    }
+
+    @PutMapping("/orders/{orderId}/credit/approve")
+    public ResponseEntity<?> approveCreditRequest(
+            @PathVariable String orderId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (!"PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "This order is not a pay later request"));
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String remark = payload == null ? "" : String.valueOf(payload.getOrDefault("remark", "")).trim();
+
+        order.setCreditStatus("APPROVED");
+        order.setCreditApprovalStatus("APPROVED");
+        order.setOrderWorkflowStatus("CREDIT_APPROVED");
+        order.setStatus(OrderStatus.APPROVED);
+        order.setApprovedAt(now);
+        order.setCreditReviewedAt(now);
+        order.setCreditReviewRemark(remark.isEmpty() ? "Credit approved by admin" : remark);
+        if (order.getCreditDueDate() == null) {
+            int creditDays = order.getCreditDays() == null ? 15 : order.getCreditDays();
+            order.setCreditDueDate((order.getCreatedAt() == null ? now : order.getCreatedAt()).plusDays(creditDays));
+        }
+        order.setLatestNotification("Credit approved - Payment due on " + order.getCreditDueDate());
+        orderRepository.save(order);
+        orderNotificationService.createNotification(order, NotificationType.CREDIT_APPROVED, order.getLatestNotification());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Credit approved successfully",
+                "orderId", order.getOrderId(),
+                "creditStatus", order.getCreditStatus(),
+                "creditApprovalStatus", order.getCreditApprovalStatus(),
+                "orderWorkflowStatus", order.getOrderWorkflowStatus(),
+                "creditDueDate", order.getCreditDueDate()
+        ));
+    }
+
+    @PostMapping("/credit/approve/{orderId}")
+    public ResponseEntity<?> approveCreditRequestPost(@PathVariable String orderId) {
+        return approveCreditRequest(orderId, null);
+    }
+
+    @PutMapping("/orders/{orderId}/credit/reject")
+    public ResponseEntity<?> rejectCreditRequest(
+            @PathVariable String orderId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (!"PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "This order is not a pay later request"));
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String remark = payload == null ? "" : String.valueOf(payload.getOrDefault("remark", "")).trim();
+
+        order.setCreditStatus("REJECTED");
+        order.setCreditApprovalStatus("REJECTED");
+        order.setOrderWorkflowStatus("CREDIT_REJECTED");
+        order.setStatus(OrderStatus.REJECTED);
+        order.setCreditReviewedAt(now);
+        order.setCreditReviewRemark(remark.isEmpty() ? "Credit rejected by admin" : remark);
+        order.setLatestNotification("Admin rejected credit request. Please complete payment to process order.");
+        orderRepository.save(order);
+        orderNotificationService.createNotification(order, NotificationType.CREDIT_REJECTED, order.getLatestNotification());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Credit request rejected",
+                "orderId", order.getOrderId(),
+                "creditStatus", order.getCreditStatus(),
+                "creditApprovalStatus", order.getCreditApprovalStatus(),
+                "orderWorkflowStatus", order.getOrderWorkflowStatus()
+        ));
+    }
+
+    @PostMapping("/credit/reject/{orderId}")
+    public ResponseEntity<?> rejectCreditRequestPost(@PathVariable String orderId) {
+        return rejectCreditRequest(orderId, null);
+    }
+
+    @PostMapping("/orders/{orderId}/payment/complete")
+    public ResponseEntity<?> markCreditPaymentReceived(
+            @PathVariable String orderId,
+            @RequestBody(required = false) Map<String, Object> payload) {
+
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found"));
+
+        if (!"PAY_LATER".equalsIgnoreCase(order.getPaymentOption())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "This order is not a pay later request"));
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String remark = payload == null ? "" : String.valueOf(payload.getOrDefault("remark", "")).trim();
+
+        order.setPaymentReceivedAt(now);
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            order.setOrderWorkflowStatus("COMPLETED");
+        } else {
+            order.setOrderWorkflowStatus("PAYMENT_RECEIVED");
+            order.setStatus(OrderStatus.APPROVED);
+        }
+        order.setLatestNotification(remark.isEmpty() ? "Payment received for pay later order" : remark);
+        orderRepository.save(order);
+        orderNotificationService.logOrderUpdate(order, resolveTrackingStatus(order), order.getLatestNotification());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Payment marked as received",
+                "orderId", order.getOrderId(),
+                "orderWorkflowStatus", order.getOrderWorkflowStatus(),
+                "paymentReceivedAt", order.getPaymentReceivedAt()
+        ));
     }
 
     @DeleteMapping("/orders/{orderId}")
@@ -1525,6 +1702,10 @@ public class AdminController {
                 });
     }
 
+    private String normalizeUpper(String value) {
+        return value == null ? "" : value.trim().toUpperCase();
+    }
+
     private Map<String, Object> toOrderView(Order order) {
         refreshTripSummary(order);
 
@@ -1536,6 +1717,19 @@ public class AdminController {
         row.put("totalPrice", order.getTotalPrice());
         row.put("address", order.getAddress());
         row.put("status", order.getStatus());
+        row.put("orderWorkflowStatus", order.getOrderWorkflowStatus());
+        row.put("paymentOption", order.getPaymentOption());
+        row.put("paymentType", order.getPaymentType());
+        row.put("creditPeriod", order.getCreditPeriod());
+        row.put("creditDays", order.getCreditDays());
+        row.put("creditStatus", order.getCreditStatus());
+        row.put("creditApprovalStatus", order.getCreditApprovalStatus());
+        row.put("creditRequestedAt", order.getCreditRequestedAt());
+        row.put("creditReviewedAt", order.getCreditReviewedAt());
+        row.put("creditDueDate", order.getCreditDueDate());
+        row.put("creditReviewRemark", order.getCreditReviewRemark());
+        row.put("paymentReceivedAt", order.getPaymentReceivedAt());
+        row.put("createdAt", order.getCreatedAt());
         row.put("deliveryDate", order.getDeliveryDate());
         row.put("scheduledDate", order.getScheduledDate());
         row.put("approvedAt", order.getApprovedAt());

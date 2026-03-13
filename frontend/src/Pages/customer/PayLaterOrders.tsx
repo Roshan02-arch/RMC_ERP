@@ -11,6 +11,7 @@ type Order = {
   status: string;
   address?: string;
   paymentOption?: string;
+  creditPeriod?: string;
   creditDays?: number;
   creditApprovalStatus?: string;
   creditRequestedAt?: string;
@@ -19,10 +20,22 @@ type Order = {
   creditReviewRemark?: string;
   approvedAt?: string;
   latestNotification?: string;
+  orderWorkflowStatus?: string;
+  paymentReceivedAt?: string;
+  createdAt?: string;
+  userId?: number;
+  customerName?: string;
+  customerPhone?: string;
 };
 
 const formatValue = (value?: string) => (value ? new Date(value).toLocaleString() : "-");
 const labelize = (value?: string) => (value || "PENDING").replaceAll("_", " ");
+const isDueDateReached = (value?: string) => {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getTime() <= Date.now();
+};
 
 const PayLaterOrders = () => {
   const navigate = useNavigate();
@@ -92,9 +105,13 @@ const PayLaterOrders = () => {
 
           {sortedOrders.map((order) => {
             const creditStatus = labelize(order.creditApprovalStatus);
-            const orderStatus = labelize(order.status);
+            const orderStatus = labelize(order.orderWorkflowStatus || order.status);
             const rejected = String(order.creditApprovalStatus || "").toUpperCase() === "REJECTED";
             const approved = String(order.creditApprovalStatus || "").toUpperCase() === "APPROVED";
+            const completedWorkflow = String(order.orderWorkflowStatus || "").toUpperCase() === "COMPLETED";
+            const dueDateReached = isDueDateReached(order.creditDueDate);
+            const paymentPending = !order.paymentReceivedAt;
+            const shouldShowPayNow = rejected || (approved && dueDateReached && paymentPending && !completedWorkflow);
             const canTrack = approved && ["APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED"].includes(String(order.status || "").toUpperCase());
             const completed = String(order.status || "").toUpperCase() === "DELIVERED";
 
@@ -114,18 +131,26 @@ const PayLaterOrders = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 text-sm text-gray-700">
+                  <p><span className="font-semibold">Customer:</span> {order.customerName || localStorage.getItem("username") || "-"}</p>
+                  <p><span className="font-semibold">Customer ID:</span> {order.userId || localStorage.getItem("userId") || "-"}</p>
+                  <p><span className="font-semibold">Contact Number:</span> {order.customerPhone || localStorage.getItem("userNumber") || "-"}</p>
                   <p><span className="font-semibold">Requested Credit:</span> {order.creditDays || 0} days</p>
+                  <p><span className="font-semibold">Credit Period:</span> {order.creditPeriod || (order.creditDays === 15 ? "7 - 15 Days" : "15 - 30 Days")}</p>
+                  <p><span className="font-semibold">Order Date:</span> {formatValue(order.createdAt)}</p>
                   <p><span className="font-semibold">Request Date:</span> {formatValue(order.creditRequestedAt)}</p>
                   <p><span className="font-semibold">Approval Date:</span> {formatValue(order.creditReviewedAt || order.approvedAt)}</p>
                   <p><span className="font-semibold">Due Date:</span> {formatValue(order.creditDueDate)}</p>
                   <p><span className="font-semibold">Order Value:</span> Rs.{Number(order.totalPrice || 0).toFixed(2)}</p>
+                  <p><span className="font-semibold">Payment Received:</span> {formatValue(order.paymentReceivedAt)}</p>
                   <p><span className="font-semibold">Admin Detail:</span> {order.creditReviewRemark || order.latestNotification || "-"}</p>
                 </div>
 
-                {rejected && (
+                {shouldShowPayNow && (
                   <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-red-700">
-                      Admin rejected the credit request. Click payment to complete the order.
+                      {rejected
+                        ? "Admin rejected your credit request. Complete your payment to place order."
+                        : "Credit due date has been reached. Please complete payment now."}
                     </p>
                     <button
                       type="button"
@@ -193,6 +218,16 @@ const PayLaterOrders = () => {
                     </div>
                   </div>
                 )}
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/pay-later-orders/${encodeURIComponent(order.orderId)}`)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold"
+                  >
+                    View Full Order Details
+                  </button>
+                </div>
               </div>
             );
           })}

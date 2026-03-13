@@ -1,8 +1,10 @@
 package com.demo.controller;
 
 import com.demo.entity.Order;
+import com.demo.entity.OrderApprovalHistory;
 import com.demo.entity.OrderAssignment;
 import com.demo.entity.OrderStatus;
+import com.demo.entity.NotificationType;
 import com.demo.entity.PaymentRecord;
 import com.demo.entity.DispatchTripRecord;
 import com.demo.entity.DeliveryTrackingStatus;
@@ -10,17 +12,20 @@ import com.demo.entity.User;
 import com.demo.entity.ConcreteProductStock;
 import com.demo.repository.ConcreteProductStockRepository;
 import com.demo.repository.DispatchTripRecordRepository;
+import com.demo.repository.OrderApprovalHistoryRepository;
 import com.demo.repository.OrderAssignmentRepository;
 import com.demo.repository.OrderRepository;
 import com.demo.repository.PaymentRecordRepository;
 import com.demo.repository.UserRepository;
 import com.demo.service.OrderService;
+import com.demo.service.OrderNotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,6 +39,9 @@ public class OrderController {
 
     @Autowired
     private OrderService orderService;
+
+    @Autowired
+    private OrderNotificationService orderNotificationService;
 
     @Autowired
     private UserRepository userRepository;
@@ -52,6 +60,9 @@ public class OrderController {
 
     @Autowired
     private OrderRepository orderRepository;
+
+    @Autowired
+    private OrderApprovalHistoryRepository approvalHistoryRepository;
 
     // ✅ GET ALL
     @GetMapping
@@ -96,10 +107,26 @@ public class OrderController {
             record.setOrder(order);
             record.setAmount(amount);
             record.setMethod(method);
-            record.setPaidAt(LocalDateTime.now());
+                LocalDateTime paidAt = LocalDateTime.now();
+                record.setPaidAt(paidAt);
             record.setTransactionId("TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
 
             PaymentRecord saved = paymentRecordRepository.save(record);
+
+                order.setPaymentReceivedAt(paidAt);
+                order.setOrderWorkflowStatus("PAID");
+                order.setStatus(OrderStatus.APPROVED);
+                order.setLatestNotification("Payment successful. Your order has been placed successfully.");
+                orderRepository.save(order);
+
+            // Log payment history
+            approvalHistoryRepository.save(new OrderApprovalHistory(
+                    order.getOrderId(),
+                    "PAYMENT_COMPLETED",
+                    "Customer",
+                    paidAt,
+                    "Payment completed successfully via " + method + "."
+            ));
 
             return ResponseEntity.ok(Map.of(
                     "message", "Payment saved successfully",
@@ -134,6 +161,61 @@ public class OrderController {
         }
     }
 
+    @GetMapping("/approval-history/{orderId}")
+    public ResponseEntity<?> getApprovalHistory(@PathVariable String orderId) {
+        try {
+            List<Map<String, Object>> history = approvalHistoryRepository
+                    .findByOrderIdOrderByActionTimeDesc(orderId)
+                    .stream()
+                    .map(h -> {
+                        Map<String, Object> row = new HashMap<>();
+                        row.put("id", h.getId());
+                        row.put("orderId", h.getOrderId());
+                        row.put("status", h.getStatus());
+                        row.put("actionBy", h.getActionBy());
+                        row.put("actionTime", h.getActionTime());
+                        row.put("remarks", h.getRemarks());
+                        return row;
+                    })
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(history);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("message", "Unable to load approval history"));
+        }
+    }
+
+    @GetMapping("/status/{orderId}")
+    public ResponseEntity<?> getOrderApprovalStatus(@PathVariable String orderId) {
+        try {
+            Order order = orderService.getOrderByOrderId(orderId);
+            String paymentOption = order.getPaymentOption() == null ? "" : order.getPaymentOption().trim().toUpperCase();
+
+            if ("PAY_LATER".equals(paymentOption)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "This endpoint is only for ONLINE and CASH_ON_DELIVERY orders"
+                ));
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("orderId", order.getOrderId());
+            response.put("grade", order.getGrade());
+            response.put("quantity", order.getQuantity());
+            response.put("totalPrice", order.getTotalPrice());
+            response.put("paymentMethod", order.getPaymentOption());
+            response.put("paymentType", order.getPaymentType());
+            response.put("paymentStatus", resolvePaymentStatus(order));
+            response.put("status", order.getStatus());
+            response.put("orderWorkflowStatus", order.getOrderWorkflowStatus());
+            response.put("paymentReceivedAt", order.getPaymentReceivedAt());
+            response.put("address", order.getAddress());
+            response.put("deliveryDate", order.getDeliveryDate());
+            response.put("createdAt", order.getCreatedAt());
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        }
+    }
+
     // ✅ CREATE ORDER
     @PostMapping("/create")
     public ResponseEntity<?> createOrder(@RequestBody Map<String, Object> payload) {
@@ -143,15 +225,26 @@ public class OrderController {
                 return ResponseEntity.badRequest().body(Map.of("message", "userId is required"));
             }
 
-            Long userId = Long.valueOf(String.valueOf(userIdValue));
+            Long userId;
+            try {
+                userId = Long.valueOf(String.valueOf(userIdValue).trim());
+            } catch (Exception ex) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Invalid userId"));
+            }
+
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
             String grade = String.valueOf(payload.getOrDefault("grade", "")).trim();
-            double quantity = Double.parseDouble(String.valueOf(payload.getOrDefault("quantity", 0)));
+            double quantity;
+            try {
+                quantity = Double.parseDouble(String.valueOf(payload.getOrDefault("quantity", 0)).trim());
+            } catch (Exception ex) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Invalid quantity"));
+            }
             String address = String.valueOf(payload.getOrDefault("address", "")).trim();
 
-            if (grade.isEmpty() || quantity <= 0 || address.isEmpty()) {
+            if (grade.isEmpty() || quantity <= 0 || !Double.isFinite(quantity) || address.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Invalid order details"));
             }
 
@@ -165,20 +258,49 @@ public class OrderController {
             }
 
             Order order = new Order();
+            LocalDateTime now = LocalDateTime.now();
             order.setOrderId(generateReadableOrderId(grade));
             order.setGrade(grade);
             order.setQuantity(quantity);
             order.setAddress(address);
-            order.setStatus(OrderStatus.APPROVED);
             order.setTotalPrice(resolveTotalPrice(grade, quantity, payload.get("totalPrice")));
             order.setUser(user);
+            order.setCreatedAt(now);
 
             Object deliveryDateValue = payload.get("deliveryDate");
             if (deliveryDateValue != null) {
                 String deliveryDate = String.valueOf(deliveryDateValue).trim();
                 if (!deliveryDate.isEmpty()) {
-                    order.setDeliveryDate(LocalDateTime.parse(deliveryDate));
+                    order.setDeliveryDate(parseDeliveryDateTime(deliveryDate));
                 }
+            }
+
+            String paymentOption = String.valueOf(payload.getOrDefault("paymentOption", "ONLINE")).trim().toUpperCase();
+            if (paymentOption.isEmpty()) {
+                paymentOption = "ONLINE";
+            }
+
+            if ("PAY_LATER".equals(paymentOption)) {
+                int creditDays = parseCreditDays(payload.get("creditDays"));
+                order.setPaymentOption("PAY_LATER");
+                order.setPaymentType("PAY_LATER");
+                order.setCreditDays(creditDays);
+                order.setCreditPeriod(resolveCreditPeriodLabel(creditDays));
+                order.setCreditStatus("PENDING_APPROVAL");
+                order.setCreditApprovalStatus("PENDING_APPROVAL");
+                order.setCreditRequestedAt(now);
+                order.setCreditDueDate(now.plusDays(creditDays));
+                order.setOrderWorkflowStatus("WAITING_ADMIN_APPROVAL");
+                order.setStatus(OrderStatus.PENDING_APPROVAL);
+                order.setLatestNotification("Pending admin credit approval");
+            } else {
+                order.setPaymentOption(paymentOption);
+                order.setPaymentType(paymentOption);
+                order.setCreditStatus("NOT_APPLICABLE");
+                order.setCreditApprovalStatus("NOT_APPLICABLE");
+                order.setOrderWorkflowStatus("WAITING_ADMIN_APPROVAL");
+                order.setStatus(OrderStatus.PENDING_APPROVAL);
+                order.setLatestNotification("Your order is waiting for admin approval");
             }
 
             Order saved = orderService.createOrder(order);
@@ -186,17 +308,53 @@ public class OrderController {
             product.setUpdatedAt(LocalDateTime.now());
             productStockRepository.save(product);
 
-            return ResponseEntity.ok(Map.of(
-                    "message", "Order created successfully",
-                    "id", saved.getId(),
-                    "orderId", saved.getOrderId(),
-                    "grade", saved.getGrade(),
-                    "quantity", saved.getQuantity(),
-                    "status", saved.getStatus(),
-                    "totalPrice", saved.getTotalPrice()
+            // Log creation history
+            approvalHistoryRepository.save(new OrderApprovalHistory(
+                    saved.getOrderId(),
+                    "ORDER_CREATED",
+                    "Customer",
+                    saved.getCreatedAt() != null ? saved.getCreatedAt() : LocalDateTime.now(),
+                    "Order placed successfully. Waiting for admin approval."
             ));
+                approvalHistoryRepository.save(new OrderApprovalHistory(
+                    saved.getOrderId(),
+                    "PENDING_APPROVAL",
+                    "System",
+                    LocalDateTime.now(),
+                    "Waiting for admin approval."
+                ));
+
+            if ("PAY_LATER".equalsIgnoreCase(saved.getPaymentOption())) {
+                orderNotificationService.createNotification(
+                        saved,
+                        NotificationType.PAY_LATER_REQUESTED,
+                        "Pending admin credit approval for order " + saved.getOrderId()
+                );
+            }
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Order created successfully");
+                response.put("id", saved.getId());
+                response.put("orderId", saved.getOrderId());
+                response.put("grade", saved.getGrade());
+                response.put("quantity", saved.getQuantity());
+                response.put("status", saved.getStatus());
+                response.put("address", saved.getAddress());
+                response.put("paymentOption", saved.getPaymentOption());
+                response.put("paymentType", saved.getPaymentType());
+                response.put("creditPeriod", saved.getCreditPeriod());
+                response.put("creditStatus", saved.getCreditStatus());
+                response.put("orderWorkflowStatus", saved.getOrderWorkflowStatus());
+                response.put("creditDueDate", saved.getCreditDueDate());
+                response.put("totalPrice", saved.getTotalPrice());
+                return ResponseEntity.ok(response);
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid delivery date/time format"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Unable to create order"));
+            String message = (e.getMessage() == null || e.getMessage().isBlank())
+                    ? "Unable to create order"
+                    : e.getMessage();
+            return ResponseEntity.badRequest().body(Map.of("message", message));
         }
     }
 
@@ -275,6 +433,19 @@ public class OrderController {
         );
     }
 
+    private String resolvePaymentStatus(Order order) {
+        if (order == null) {
+            return "PENDING";
+        }
+
+        String paymentOption = String.valueOf(order.getPaymentOption() == null ? "" : order.getPaymentOption()).trim().toUpperCase();
+        if ("CASH_ON_DELIVERY".equals(paymentOption) || "PAY_LATER".equals(paymentOption)) {
+            return "NOT_REQUIRED";
+        }
+
+        return order.getPaymentReceivedAt() != null ? "PAID" : "PENDING";
+    }
+
     private String generateReadableOrderId(String grade) {
         String gradeToken = sanitizeForOrderId(grade);
         if (gradeToken.isEmpty()) {
@@ -310,9 +481,26 @@ public class OrderController {
         row.put("quantity", order.getQuantity());
         row.put("totalPrice", order.getTotalPrice());
         row.put("address", order.getAddress());
+        row.put("customerName", order.getUser() != null ? order.getUser().getName() : null);
+        row.put("customerId", order.getUser() != null ? order.getUser().getId() : null);
+        row.put("customerPhone", order.getUser() != null ? order.getUser().getNumber() : null);
+        row.put("customerEmail", order.getUser() != null ? order.getUser().getEmail() : null);
+        row.put("createdAt", order.getCreatedAt());
         row.put("deliveryDate", order.getDeliveryDate());
         row.put("status", order.getStatus());
+        row.put("orderWorkflowStatus", order.getOrderWorkflowStatus());
+        row.put("paymentType", order.getPaymentType());
         row.put("latestNotification", order.getLatestNotification());
+        row.put("paymentOption", order.getPaymentOption());
+        row.put("creditPeriod", order.getCreditPeriod());
+        row.put("creditDays", order.getCreditDays());
+        row.put("creditStatus", order.getCreditStatus());
+        row.put("creditApprovalStatus", order.getCreditApprovalStatus());
+        row.put("creditRequestedAt", order.getCreditRequestedAt());
+        row.put("creditReviewedAt", order.getCreditReviewedAt());
+        row.put("creditDueDate", order.getCreditDueDate());
+        row.put("creditReviewRemark", order.getCreditReviewRemark());
+        row.put("paymentReceivedAt", order.getPaymentReceivedAt());
         row.put("dispatchDateTime", order.getDispatchDateTime());
         row.put("expectedArrivalTime", order.getExpectedArrivalTime());
         row.put("deliveryTrackingStatus", resolveTrackingStatus(order));
@@ -394,5 +582,34 @@ public class OrderController {
             default:
                 return status.name();
         }
+    }
+
+    private int parseCreditDays(Object rawValue) {
+        if (rawValue == null) {
+            return 15;
+        }
+        try {
+            int parsed = Integer.parseInt(String.valueOf(rawValue).trim());
+            return parsed <= 15 ? 15 : 30;
+        } catch (NumberFormatException ignored) {
+            return 15;
+        }
+    }
+
+    private String resolveCreditPeriodLabel(int creditDays) {
+        return creditDays <= 15 ? "7 - 15 Days" : "15 - 30 Days";
+    }
+
+    private LocalDateTime parseDeliveryDateTime(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.isEmpty()) {
+            throw new DateTimeParseException("Invalid delivery date", value, 0);
+        }
+
+        if (trimmed.length() == 16) {
+            return LocalDateTime.parse(trimmed + ":00");
+        }
+
+        return LocalDateTime.parse(trimmed);
     }
 }

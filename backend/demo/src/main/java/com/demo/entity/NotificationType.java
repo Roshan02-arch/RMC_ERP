@@ -1,6 +1,10 @@
 package com.demo.entity;
 
 public enum NotificationType {
+    PAY_LATER_REQUESTED,
+    CREDIT_APPROVED,
+    CREDIT_REJECTED,
+    PAY_LATER_REMINDER,
     ORDER_APPROVED,
     IN_PRODUCTION,
     DISPATCH_SCHEDULED,

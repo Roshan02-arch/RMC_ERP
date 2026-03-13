@@ -113,6 +113,10 @@ const AdminDashboard = () => {
             Orders
           </button>
 
+          <button onClick={() => navigate("/admin/credit-orders")} className="text-left hover:text-indigo-400 transition">
+            Approval Page
+          </button>
+
           <button onClick={() => navigate("/admin/users")} className="text-left hover:text-indigo-400 transition">
             Users
           </button>

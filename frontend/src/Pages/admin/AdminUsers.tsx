@@ -82,6 +82,13 @@ const AdminUsers = () => {
             Orders
           </button>
 
+          <button
+            onClick={() => navigate("/admin/credit-orders")}
+            className="text-left px-4 py-2 rounded-lg hover:bg-slate-800 transition"
+          >
+            Approval Page
+          </button>
+
           <button onClick={fetchUsers} className="text-left px-4 py-2 rounded-lg bg-slate-800">
             Users
           </button>

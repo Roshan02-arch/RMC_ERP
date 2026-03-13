@@ -19,12 +19,18 @@ public class Order {
     private double totalPrice;
     private String address;
     private String paymentOption;
+    private String paymentType;
+    private String creditPeriod;
     private Integer creditDays;
+    private String creditStatus;
     private String creditApprovalStatus;
     private LocalDateTime creditRequestedAt;
     private LocalDateTime creditReviewedAt;
     private LocalDateTime creditDueDate;
     private String creditReviewRemark;
+    private String orderWorkflowStatus;
+    private LocalDateTime createdAt;
+    private LocalDateTime paymentReceivedAt;
 
     private LocalDateTime deliveryDate;
     private LocalDateTime scheduledDate;
@@ -126,12 +132,36 @@ public class Order {
         this.paymentOption = paymentOption;
     }
 
+    public String getPaymentType() {
+        return paymentType;
+    }
+
+    public void setPaymentType(String paymentType) {
+        this.paymentType = paymentType;
+    }
+
+    public String getCreditPeriod() {
+        return creditPeriod;
+    }
+
+    public void setCreditPeriod(String creditPeriod) {
+        this.creditPeriod = creditPeriod;
+    }
+
     public Integer getCreditDays() {
         return creditDays;
     }
 
     public void setCreditDays(Integer creditDays) {
         this.creditDays = creditDays;
+    }
+
+    public String getCreditStatus() {
+        return creditStatus;
+    }
+
+    public void setCreditStatus(String creditStatus) {
+        this.creditStatus = creditStatus;
     }
 
     public String getCreditApprovalStatus() {
@@ -172,6 +202,30 @@ public class Order {
 
     public void setCreditReviewRemark(String creditReviewRemark) {
         this.creditReviewRemark = creditReviewRemark;
+    }
+
+    public String getOrderWorkflowStatus() {
+        return orderWorkflowStatus;
+    }
+
+    public void setOrderWorkflowStatus(String orderWorkflowStatus) {
+        this.orderWorkflowStatus = orderWorkflowStatus;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getPaymentReceivedAt() {
+        return paymentReceivedAt;
+    }
+
+    public void setPaymentReceivedAt(LocalDateTime paymentReceivedAt) {
+        this.paymentReceivedAt = paymentReceivedAt;
     }
 
     public LocalDateTime getDeliveryDate() {
@@ -388,5 +442,12 @@ public class Order {
 
     public void setAssignment(OrderAssignment assignment) {
         this.assignment = assignment;
+    }
+
+    @PrePersist
+    public void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 }

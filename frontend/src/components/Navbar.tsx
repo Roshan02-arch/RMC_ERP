@@ -25,6 +25,18 @@ const formatTimestamp = (value?: string) => {
 };
 
 const typeBadgeClass = (type: string) => {
+  if (type === "PAY_LATER_REQUESTED") {
+    return "bg-amber-100 text-amber-700";
+  }
+  if (type === "CREDIT_APPROVED") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+  if (type === "CREDIT_REJECTED") {
+    return "bg-rose-100 text-rose-700";
+  }
+  if (type === "PAY_LATER_REMINDER") {
+    return "bg-violet-100 text-violet-700";
+  }
   if (type === "ORDER_DELIVERED" || type === "ORDER_APPROVED") {
     return "bg-emerald-100 text-emerald-700";
   }
@@ -343,6 +355,13 @@ const Navbar = () => {
                   onClick={() => setShowMenu(false)}
                 >
                   Pay Later Orders
+                </NavLink>
+                <NavLink
+                  to="/order-approval-status"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  Order Approval Status
                 </NavLink>
                 <NavLink
                   to="/billing-payment"

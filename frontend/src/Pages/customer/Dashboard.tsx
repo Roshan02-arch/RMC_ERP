@@ -9,6 +9,9 @@ interface Order {
   grade: string;
   quantity: number;
   status: string;
+  paymentOption?: string;
+  creditApprovalStatus?: string;
+  orderWorkflowStatus?: string;
   deliveryTrackingStatus?: string;
   deliveryTrackingStatusLabel?: string;
   dispatchDateTime?: string;
@@ -112,6 +115,21 @@ const Dashboard = () => {
   const total = orders.length;
   const pending = orders.filter((order) => getDashboardStatus(order) === "PENDING_APPROVAL").length;
   const delivered = orders.filter((order) => getDashboardStatus(order) === "DELIVERED").length;
+  const payLaterOrders = orders.filter((order) => String(order.paymentOption || "").toUpperCase() === "PAY_LATER");
+  const pendingCreditApproval = payLaterOrders.filter(
+    (order) => ["PENDING", "PENDING_APPROVAL"].includes(String(order.creditApprovalStatus || "").toUpperCase()),
+  ).length;
+  const approvedCreditOrders = payLaterOrders.filter(
+    (order) => String(order.creditApprovalStatus || "").toUpperCase() === "APPROVED",
+  ).length;
+  const rejectedCreditOrders = payLaterOrders.filter(
+    (order) => String(order.creditApprovalStatus || "").toUpperCase() === "REJECTED",
+  ).length;
+  const completedCreditOrders = payLaterOrders.filter((order) => {
+    const workflow = String(order.orderWorkflowStatus || "").toUpperCase();
+    const status = String(order.status || "").toUpperCase();
+    return workflow === "COMPLETED" || status === "DELIVERED";
+  }).length;
   const filteredOrders = orders.filter((order) => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return true;
@@ -169,6 +187,25 @@ const Dashboard = () => {
                 <p className="text-3xl font-bold text-gray-800">{delivered}</p>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-10">
+          <div className="bg-white rounded-xl border border-amber-200 p-4">
+            <p className="text-xs uppercase tracking-wide text-amber-700">Pending Credit Approval</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{pendingCreditApproval}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-emerald-200 p-4">
+            <p className="text-xs uppercase tracking-wide text-emerald-700">Credit Approved Orders</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{approvedCreditOrders}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-rose-200 p-4">
+            <p className="text-xs uppercase tracking-wide text-rose-700">Credit Rejected Orders</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{rejectedCreditOrders}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-sky-200 p-4">
+            <p className="text-xs uppercase tracking-wide text-sky-700">Completed Credit Orders</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{completedCreditOrders}</p>
           </div>
         </div>
 

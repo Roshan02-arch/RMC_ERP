@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 
 type Order = {
@@ -71,8 +71,9 @@ const buildMapEmbedUrl = (latitude: number, longitude: number) => {
 const DeliveryTracking = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { orderId: routeOrderId } = useParams();
   const navState = (location.state as { selectedOrderId?: string; selectedRawOrderId?: number } | null) || null;
-  const lockedOrderId = navState?.selectedOrderId || "";
+  const lockedOrderId = navState?.selectedOrderId || routeOrderId || "";
   const lockedRawOrderId = Number(navState?.selectedRawOrderId || 0);
   const [orders, setOrders] = useState<Order[]>([]);
   const [rawOrders, setRawOrders] = useState<RawMaterialOrder[]>([]);

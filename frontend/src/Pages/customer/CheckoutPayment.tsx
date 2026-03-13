@@ -1,5 +1,18 @@
-import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import {
+  FiCalendar,
+  FiChevronRight,
+  FiCreditCard,
+  FiMail,
+  FiMapPin,
+  FiPhone,
+  FiShoppingBag,
+  FiTruck,
+  FiUser,
+} from "react-icons/fi";
+import { toast } from "react-toastify";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { API_BASE_URL } from "../../api/api";
 
 declare global {
   interface Window {
@@ -38,8 +51,55 @@ type ExistingOrderPaymentState = {
   existingDeliveryDate?: string;
 };
 
+type PaymentMethod = "ONLINE" | "CASH_ON_DELIVERY" | "PAY_LATER";
+
+type DeliveryAddressCardProps = {
+  customerName: string;
+  setCustomerName: (value: string) => void;
+  phoneNumber: string;
+  setPhoneNumber: (value: string) => void;
+  email: string;
+  setEmail: (value: string) => void;
+  address: string;
+  setAddress: (value: string) => void;
+  deliveryDate: string;
+  setDeliveryDate: (value: string) => void;
+  disabledDeliveryDate: boolean;
+};
+
+type OrderDetailsCardProps = {
+  cart: CartItem[];
+  isExistingOrderPayment: boolean;
+  paymentState: ExistingOrderPaymentState | null;
+  updateQty: (key: string, qty: number) => void;
+  removeItem: (key: string) => void;
+};
+
+type PaymentMethodCardProps = {
+  method: PaymentMethod;
+  setMethod: (value: PaymentMethod) => void;
+  creditDays: 15 | 30;
+  setCreditDays: (value: 15 | 30) => void;
+  allowPayLater: boolean;
+  allowCashOnDelivery: boolean;
+};
+
+type OrderSummaryCardProps = {
+  subtotal: number;
+  deliveryCharges: number;
+  tax: number;
+  totalAmount: number;
+  loading: boolean;
+  disabled: boolean;
+  buttonLabel: string;
+  onSubmit: () => void;
+};
+
 const CART_KEY = "checkout_cart";
 const RAZORPAY_KEY = (import.meta.env.VITE_RAZORPAY_KEY as string | undefined) || "rzp_test_SP8t85FWw5iSOH";
+
+const cardShell = "rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]";
+const inputClass = "w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:bg-white";
 
 const parseApiResponse = async (response: Response) => {
   const raw = await response.text();
@@ -62,25 +122,405 @@ const loadRazorpayScript = async (): Promise<boolean> => {
   });
 };
 
+const playPaymentSuccessSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as typeof window & {
+      webkitAudioContext?: typeof AudioContext;
+    }).webkitAudioContext;
+
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(523.25, context.currentTime);
+    oscillator.frequency.linearRampToValueAtTime(659.25, context.currentTime + 0.12);
+    oscillator.frequency.linearRampToValueAtTime(783.99, context.currentTime + 0.24);
+
+    gainNode.gain.setValueAtTime(0.0001, context.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.03);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.45);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(context.destination);
+
+    oscillator.start(context.currentTime);
+    oscillator.stop(context.currentTime + 0.45);
+
+    window.setTimeout(() => {
+      void context.close().catch(() => undefined);
+    }, 700);
+  } catch {
+    // Ignore sound playback failures so payment flow is unaffected.
+  }
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const DeliveryAddressCard = ({
+  customerName,
+  setCustomerName,
+  phoneNumber,
+  setPhoneNumber,
+  email,
+  setEmail,
+  address,
+  setAddress,
+  deliveryDate,
+  setDeliveryDate,
+  disabledDeliveryDate,
+}: DeliveryAddressCardProps) => (
+  <section className={cardShell}>
+    <div className="flex items-center gap-3">
+      <div className="rounded-2xl bg-sky-50 p-3 text-sky-600">
+        <FiMapPin className="text-xl" />
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-600">Checkout Details</p>
+        <h2 className="mt-1 text-xl font-bold text-slate-900">Delivery Address</h2>
+      </div>
+    </div>
+
+    <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <label className="space-y-2">
+        <span className="text-sm font-semibold text-slate-700">Customer Name</span>
+        <div className="relative">
+          <FiUser className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className={`${inputClass} pl-11`} value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+        </div>
+      </label>
+
+      <label className="space-y-2">
+        <span className="text-sm font-semibold text-slate-700">Phone Number</span>
+        <div className="relative">
+          <FiPhone className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className={`${inputClass} pl-11`} value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} />
+        </div>
+      </label>
+
+      <label className="space-y-2 md:col-span-2">
+        <span className="text-sm font-semibold text-slate-700">Email</span>
+        <div className="relative">
+          <FiMail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className={`${inputClass} pl-11`} value={email} onChange={(event) => setEmail(event.target.value)} />
+        </div>
+      </label>
+
+      <label className="space-y-2 md:col-span-2">
+        <span className="text-sm font-semibold text-slate-700">Delivery Address</span>
+        <div className="relative">
+          <FiMapPin className="pointer-events-none absolute left-4 top-5 text-slate-400" />
+          <textarea
+            rows={4}
+            className={`${inputClass} resize-none pl-11`}
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder="Enter your delivery address"
+          />
+        </div>
+      </label>
+
+      <label className="space-y-2 md:col-span-2">
+        <span className="text-sm font-semibold text-slate-700">Preferred Delivery Date</span>
+        <div className="relative">
+          <FiCalendar className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="datetime-local"
+            className={`${inputClass} pl-11`}
+            value={deliveryDate}
+            onChange={(event) => setDeliveryDate(event.target.value)}
+            disabled={disabledDeliveryDate}
+          />
+        </div>
+      </label>
+    </div>
+  </section>
+);
+
+const OrderDetailsCard = ({
+  cart,
+  isExistingOrderPayment,
+  paymentState,
+  updateQty,
+  removeItem,
+}: OrderDetailsCardProps) => (
+  <section className={cardShell}>
+    <div className="flex items-center gap-3">
+      <div className="rounded-2xl bg-orange-50 p-3 text-orange-600">
+        <FiShoppingBag className="text-xl" />
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-600">Review Items</p>
+        <h2 className="mt-1 text-xl font-bold text-slate-900">Order Details</h2>
+      </div>
+    </div>
+
+    <div className="mt-6 overflow-x-auto">
+      <table className="min-w-full text-sm text-left text-slate-700">
+        <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.2em] text-slate-500">
+          <tr>
+            <th className="px-3 py-3">Product Grade</th>
+            <th className="px-3 py-3">Quantity</th>
+            <th className="px-3 py-3">Price / Unit</th>
+            <th className="px-3 py-3">Total Price</th>
+            {!isExistingOrderPayment && <th className="px-3 py-3">Action</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {isExistingOrderPayment ? (
+            <tr>
+              <td className="px-3 py-4 font-semibold text-slate-900">{paymentState?.existingOrderLabel || paymentState?.existingOrderId || "Existing Order"}</td>
+              <td className="px-3 py-4">1</td>
+              <td className="px-3 py-4">{formatCurrency(Number(paymentState?.existingAmount || 0))}</td>
+              <td className="px-3 py-4 font-semibold text-slate-900">{formatCurrency(Number(paymentState?.existingAmount || 0))}</td>
+            </tr>
+          ) : (
+            cart.map((item) => (
+              <tr key={item.key}>
+                <td className="px-3 py-4">
+                  <p className="font-semibold text-slate-900">{item.name}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.itemType === "concrete" ? "Concrete Product" : "Raw Material"}</p>
+                </td>
+                <td className="px-3 py-4">
+                  <input
+                    type="number"
+                    min={1}
+                    value={item.quantity}
+                    onChange={(event) => updateQty(item.key, Number(event.target.value))}
+                    className="w-24 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  />
+                </td>
+                <td className="px-3 py-4">{formatCurrency(item.pricePerUnit)} / {item.unit}</td>
+                <td className="px-3 py-4 font-semibold text-slate-900">{formatCurrency(item.quantity * item.pricePerUnit)}</td>
+                <td className="px-3 py-4">
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.key)}
+                    className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </section>
+);
+
+const PaymentMethodCard = ({
+  method,
+  setMethod,
+  creditDays,
+  setCreditDays,
+  allowPayLater,
+  allowCashOnDelivery,
+}: PaymentMethodCardProps) => (
+  <section className={cardShell}>
+    <div className="flex items-center gap-3">
+      <div className="rounded-2xl bg-indigo-50 p-3 text-indigo-600">
+        <FiCreditCard className="text-xl" />
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-600">Checkout Payment</p>
+        <h2 className="mt-1 text-xl font-bold text-slate-900">Payment Method</h2>
+      </div>
+    </div>
+
+    <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <button
+        type="button"
+        onClick={() => setMethod("ONLINE")}
+        className={`rounded-2xl border p-4 text-left transition ${
+          method === "ONLINE"
+            ? "border-sky-500 bg-sky-50 shadow-sm"
+            : "border-slate-200 bg-white hover:border-slate-300"
+        }`}
+      >
+        <p className="text-sm font-semibold text-slate-900">Online Payment</p>
+        <p className="mt-1 text-sm text-slate-500">Secure online payment using Razorpay checkout.</p>
+      </button>
+
+      {allowCashOnDelivery && (
+        <button
+          type="button"
+          onClick={() => setMethod("CASH_ON_DELIVERY")}
+          className={`rounded-2xl border p-4 text-left transition ${
+            method === "CASH_ON_DELIVERY"
+              ? "border-slate-500 bg-slate-50 shadow-sm"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+        >
+          <p className="text-sm font-semibold text-slate-900">Cash on Delivery</p>
+          <p className="mt-1 text-sm text-slate-500">Pay in cash when the order is delivered to your address.</p>
+        </button>
+      )}
+
+      {allowPayLater && (
+        <button
+          type="button"
+          onClick={() => setMethod("PAY_LATER")}
+          className={`rounded-2xl border p-4 text-left transition ${
+            method === "PAY_LATER"
+              ? "border-amber-500 bg-amber-50 shadow-sm"
+              : "border-slate-200 bg-white hover:border-slate-300"
+          }`}
+        >
+          <p className="text-sm font-semibold text-slate-900">Pay Later</p>
+          <p className="mt-1 text-sm text-slate-500">Request admin-approved credit terms for this order.</p>
+        </button>
+      )}
+    </div>
+
+    {allowPayLater && method === "PAY_LATER" && (
+      <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <label className="space-y-2">
+          <span className="text-sm font-semibold text-amber-900">Credit Period</span>
+          <select
+            value={String(creditDays)}
+            onChange={(event) => setCreditDays(Number(event.target.value) as 15 | 30)}
+            className="w-full rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-700"
+          >
+            <option value="15">7 - 15 Days</option>
+            <option value="30">15 - 30 Days</option>
+          </select>
+        </label>
+        <p className="mt-3 text-xs text-amber-900/80">Your pay later request will be sent for admin approval before dispatch.</p>
+      </div>
+    )}
+  </section>
+);
+
+const OrderSummaryCard = ({
+  subtotal,
+  deliveryCharges,
+  tax,
+  totalAmount,
+  loading,
+  disabled,
+  buttonLabel,
+  onSubmit,
+}: OrderSummaryCardProps) => (
+  <aside className={`${cardShell} sticky top-24`}>
+    <div className="flex items-center gap-3">
+      <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
+        <FiTruck className="text-xl" />
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">Summary</p>
+        <h2 className="mt-1 text-xl font-bold text-slate-900">Order Summary</h2>
+      </div>
+    </div>
+
+    <div className="mt-6 space-y-4 text-sm text-slate-600">
+      <div className="flex items-center justify-between">
+        <span>Subtotal</span>
+        <span className="font-semibold text-slate-900">{formatCurrency(subtotal)}</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span>Delivery Charges</span>
+        <span className="font-semibold text-slate-900">{formatCurrency(deliveryCharges)}</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span>Tax</span>
+        <span className="font-semibold text-slate-900">{formatCurrency(tax)}</span>
+      </div>
+      <div className="border-t border-dashed border-slate-200 pt-4">
+        <div className="flex items-center justify-between text-base">
+          <span className="font-semibold text-slate-900">Total Amount</span>
+          <span className="font-bold text-slate-900">{formatCurrency(totalAmount)}</span>
+        </div>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onSubmit}
+      className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-sm font-semibold text-white shadow-md transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+      <span>{buttonLabel}</span>
+      {!loading && <FiChevronRight className="text-base" />}
+    </button>
+  </aside>
+);
+
 const CheckoutPayment = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const paymentState = ((location.state as ExistingOrderPaymentState | null) || null);
+  const queryOrderId = searchParams.get("orderId") || "";
+  const existingOrderId = paymentState?.existingOrderId || queryOrderId || "";
+  const [existingOrderAmount, setExistingOrderAmount] = useState<number>(Number(paymentState?.existingAmount || 0));
+  const isExistingOrderPayment = Boolean(existingOrderId);
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [address, setAddress] = useState("");
-  const [deliveryDate, setDeliveryDate] = useState("");
-  const [method, setMethod] = useState<"UPI" | "BANK_TRANSFER" | "CASH_ON_DELIVERY" | "PAY_LATER">("UPI");
+  const [customerName, setCustomerName] = useState(localStorage.getItem("username") || "");
+  const [phoneNumber, setPhoneNumber] = useState(localStorage.getItem("userNumber") || "");
+  const [email, setEmail] = useState(localStorage.getItem("userEmail") || "");
+  const [address, setAddress] = useState(paymentState?.existingAddress || "");
+  const [deliveryDate, setDeliveryDate] = useState(paymentState?.existingDeliveryDate || "");
+  const [method, setMethod] = useState<PaymentMethod>("ONLINE");
   const [creditDays, setCreditDays] = useState<15 | 30>(15);
-  const [upiId, setUpiId] = useState("");
-  const [bankAccountName, setBankAccountName] = useState("");
-  const [bankAccountNo, setBankAccountNo] = useState("");
-  const [bankIfsc, setBankIfsc] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [bankUtr, setBankUtr] = useState("");
-  const paymentState = ((location.state as ExistingOrderPaymentState | null) || null);
-  const existingOrderId = paymentState?.existingOrderId || "";
-  const existingOrderAmount = Number(paymentState?.existingAmount || 0);
-  const isExistingOrderPayment = Boolean(existingOrderId);
+
+  useEffect(() => {
+    if (!isExistingOrderPayment || paymentState?.existingAmount) {
+      return;
+    }
+
+    const run = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/orders/status/${encodeURIComponent(existingOrderId)}`);
+        const raw = await response.text();
+        let data: Record<string, unknown> = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          data = { message: raw };
+        }
+
+        if (response.ok) {
+          setExistingOrderAmount(Number(data.totalPrice || 0));
+          setAddress(String(data.address || ""));
+          setDeliveryDate(String(data.deliveryDate || ""));
+          return;
+        }
+
+        const fallbackRes = await fetch(`${API_BASE_URL}/api/orders/orderId/${encodeURIComponent(existingOrderId)}`);
+        const fallbackRaw = await fallbackRes.text();
+        let fallbackData: Record<string, unknown> = {};
+        try {
+          fallbackData = fallbackRaw ? JSON.parse(fallbackRaw) : {};
+        } catch {
+          fallbackData = { message: fallbackRaw };
+        }
+
+        if (fallbackRes.ok) {
+          setExistingOrderAmount(Number(fallbackData.totalPrice || 0));
+          setAddress(String(fallbackData.address || ""));
+          setDeliveryDate(String(fallbackData.deliveryDate || ""));
+        }
+      } catch {
+        // keep fallback UI without blocking checkout
+      }
+    };
+
+    void run();
+  }, [existingOrderId, isExistingOrderPayment, paymentState?.existingAmount]);
 
   const initialCart = useMemo(() => {
     if (isExistingOrderPayment) return [];
@@ -93,16 +533,17 @@ const CheckoutPayment = () => {
     } catch {
       return [];
     }
-  }, [location.state, isExistingOrderPayment]);
+  }, [isExistingOrderPayment, location.state]);
 
   const [cart, setCart] = useState<CartItem[]>(initialCart);
-  const concreteItems = cart.filter((c) => c.itemType === "concrete");
-  const materialItems = cart.filter((c) => c.itemType === "material");
-  const estimatedTotal = isExistingOrderPayment ? existingOrderAmount : cart.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
-  const concreteTotal = isExistingOrderPayment ? existingOrderAmount : concreteItems.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
-
-  const validUpi = (value: string) => /^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/i.test(value.trim());
-  const validIfsc = (value: string) => /^[A-Z]{4}0[A-Z0-9]{6}$/i.test(value.trim());
+  const concreteItems = cart.filter((item) => item.itemType === "concrete");
+  const materialItems = cart.filter((item) => item.itemType === "material");
+  const subtotal = isExistingOrderPayment
+    ? existingOrderAmount
+    : cart.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const deliveryCharges = 0;
+  const tax = 0;
+  const totalAmount = subtotal + deliveryCharges + tax;
 
   const persistCart = (items: CartItem[]) => {
     setCart(items);
@@ -110,7 +551,7 @@ const CheckoutPayment = () => {
   };
 
   const removeItem = (key: string) => {
-    persistCart(cart.filter((c) => c.key !== key));
+    persistCart(cart.filter((item) => item.key !== key));
   };
 
   const updateQty = (key: string, qty: number) => {
@@ -118,15 +559,11 @@ const CheckoutPayment = () => {
       removeItem(key);
       return;
     }
-    persistCart(cart.map((c) => (c.key === key ? { ...c, quantity: qty } : c)));
+    persistCart(cart.map((item) => (item.key === key ? { ...item, quantity: qty } : item)));
   };
 
-  const createConcreteOrder = async (
-    item: CartItem,
-    userId: string,
-    paymentOption: "ONLINE" | "CASH_ON_DELIVERY",
-  ): Promise<CreatedConcreteOrder> => {
-    const response = await fetch("http://localhost:8080/api/orders/create", {
+  const createConcreteOrder = async (item: CartItem, userId: string, paymentOption: "ONLINE" | "CASH_ON_DELIVERY") => {
+    const response = await fetch(`${API_BASE_URL}/api/orders/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -144,8 +581,8 @@ const CheckoutPayment = () => {
     return data as CreatedConcreteOrder;
   };
 
-  const createMaterialOrder = async (item: CartItem, userId: string): Promise<CreatedRawMaterialOrder> => {
-    const response = await fetch("http://localhost:8080/api/inventory/raw-material-orders", {
+  const createMaterialOrder = async (item: CartItem, userId: string) => {
+    const response = await fetch(`${API_BASE_URL}/api/inventory/raw-material-orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -158,11 +595,11 @@ const CheckoutPayment = () => {
     const data = await parseApiResponse(response);
     if (!response.ok) throw new Error(data.message || `Unable to create raw material order for ${item.name}`);
     const orderId = Number(data?.order?.id);
-    return { id: Number.isFinite(orderId) ? orderId : 0 };
+    return { id: Number.isFinite(orderId) ? orderId : 0 } as CreatedRawMaterialOrder;
   };
 
   const recordPayment = async (orderId: string, amount: number, paymentMethod: string) => {
-    const response = await fetch(`http://localhost:8080/api/orders/${orderId}/payments`, {
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -174,7 +611,7 @@ const CheckoutPayment = () => {
     if (!response.ok) throw new Error(data.message || "Unable to save payment");
   };
 
-  const openRazorpayCheckout = async (amount: number, selectedMethod: "UPI" | "BANK_TRANSFER") => {
+  const openRazorpayCheckout = async (amount: number) => {
     const loaded = await loadRazorpayScript();
     if (!loaded || !window.Razorpay) {
       throw new Error("Unable to load Razorpay checkout");
@@ -186,22 +623,22 @@ const CheckoutPayment = () => {
         amount: Math.round(amount * 100),
         currency: "INR",
         name: "RMC ERP",
-        description: "Concrete Order Payment",
+        description: "Checkout Payment",
         method: {
-          upi: selectedMethod === "UPI",
-          netbanking: selectedMethod === "BANK_TRANSFER",
+          upi: true,
+          netbanking: true,
           card: false,
           wallet: false,
           emi: false,
           paylater: false,
         },
         prefill: {
-          name: localStorage.getItem("username") || "",
-          email: localStorage.getItem("userEmail") || "",
-          contact: localStorage.getItem("userNumber") || "",
+          name: customerName,
+          email,
+          contact: phoneNumber,
         },
         theme: {
-          color: "#111827",
+          color: "#2563eb",
         },
         handler: (response: { razorpay_payment_id?: string }) => {
           const paymentId = response?.razorpay_payment_id || "";
@@ -224,22 +661,32 @@ const CheckoutPayment = () => {
   const handlePlaceOrderAndPay = async () => {
     setError("");
     const userId = localStorage.getItem("userId");
+
     if (!userId) {
       setError("User not logged in.");
       return;
     }
+
+    if (!customerName.trim() || !phoneNumber.trim() || !email.trim()) {
+      setError("Customer name, phone number, and email are required.");
+      return;
+    }
+
     if (!isExistingOrderPayment && cart.length === 0) {
       setError("Cart is empty.");
       return;
     }
-    if (!isExistingOrderPayment && !address.trim()) {
+
+    if (!address.trim()) {
       setError("Delivery address is required.");
       return;
     }
+
     if (!isExistingOrderPayment && concreteItems.length > 0 && !deliveryDate) {
-      setError("Delivery date/time is required for concrete orders.");
+      setError("Preferred delivery date is required for concrete orders.");
       return;
     }
+
     if (method === "PAY_LATER") {
       if (materialItems.length > 0) {
         setError("Pay later is available only for concrete orders.");
@@ -255,84 +702,33 @@ const CheckoutPayment = () => {
       });
       return;
     }
-    if (method === "UPI" && !validUpi(upiId)) {
-      setError("Enter valid UPI ID (example: yourname@okaxis).");
-      return;
-    }
-    if (method === "BANK_TRANSFER") {
-      if (!bankAccountName.trim() || !bankName.trim() || !bankAccountNo.trim() || !bankUtr.trim()) {
-        setError("Enter complete bank transfer details.");
-        return;
-      }
-      if (!validIfsc(bankIfsc)) {
-        setError("Enter valid IFSC code.");
-        return;
-      }
-    }
 
     try {
       setLoading(true);
       const createdOrderIds: string[] = [];
       const createdRawOrderIds: number[] = [];
-      let razorpayPaymentId = "";
+      let paymentId = "";
 
       if (isExistingOrderPayment) {
-        if (method === "UPI" || method === "BANK_TRANSFER") {
-          if (existingOrderAmount <= 0) {
-            throw new Error("No payable amount found for this order.");
-          }
-          razorpayPaymentId = await openRazorpayCheckout(existingOrderAmount, method);
+        if (existingOrderAmount <= 0) {
+          throw new Error("No payable amount found for this order.");
         }
 
-        const payMethod =
-          method === "UPI"
-            ? `UPI:${upiId.trim()}|RAZORPAY:${razorpayPaymentId}`
-            : method === "BANK_TRANSFER"
-            ? `BANK_TRANSFER:${bankName.trim()}|A/C:${bankAccountNo.trim()}|IFSC:${bankIfsc.trim().toUpperCase()}|UTR:${bankUtr.trim()}|RAZORPAY:${razorpayPaymentId}`
-            : "CASH_ON_DELIVERY";
-
-        if (method !== "CASH_ON_DELIVERY") {
-          await recordPayment(existingOrderId, existingOrderAmount, payMethod);
-        }
-
-        navigate("/order-success", {
-          state: {
-            orderId: existingOrderId,
-            paymentId: method === "CASH_ON_DELIVERY" ? "COD-REGISTERED" : "PAYMENT-SUCCESS",
-            selectedOrderId: existingOrderId,
-            title: "Payment Completed",
-            subtitle: "Payment received for your rejected credit order.",
-            orderStatusLabel: "Payment Successful",
-          },
-        });
+        paymentId = await openRazorpayCheckout(existingOrderAmount);
+        await recordPayment(existingOrderId, existingOrderAmount, `ONLINE|RAZORPAY:${paymentId}`);
+        playPaymentSuccessSound();
+        toast.success("Payment successful. Your order has been placed.");
+        navigate(`/order-tracking/${encodeURIComponent(existingOrderId)}`);
         return;
       }
 
-      if (method === "UPI" || method === "BANK_TRANSFER") {
-        if (concreteTotal <= 0) {
-          throw new Error("No payable concrete amount found for online payment.");
-        }
-        razorpayPaymentId = await openRazorpayCheckout(concreteTotal, method);
+      if (subtotal <= 0) {
+        throw new Error("No payable amount found for this order.");
       }
 
       for (const item of concreteItems) {
-        const created = await createConcreteOrder(
-          item,
-          userId,
-          method === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : "ONLINE",
-        );
+        const created = await createConcreteOrder(item, userId, method === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : "ONLINE");
         createdOrderIds.push(created.orderId);
-
-        const payMethod =
-          method === "UPI"
-            ? `UPI:${upiId.trim()}|RAZORPAY:${razorpayPaymentId}`
-            : method === "BANK_TRANSFER"
-            ? `BANK_TRANSFER:${bankName.trim()}|A/C:${bankAccountNo.trim()}|IFSC:${bankIfsc.trim().toUpperCase()}|UTR:${bankUtr.trim()}|RAZORPAY:${razorpayPaymentId}`
-            : "CASH_ON_DELIVERY";
-
-        if (method !== "CASH_ON_DELIVERY") {
-          await recordPayment(created.orderId, item.pricePerUnit * item.quantity, payMethod);
-        }
       }
 
       for (const item of materialItems) {
@@ -343,12 +739,20 @@ const CheckoutPayment = () => {
       }
 
       localStorage.removeItem(CART_KEY);
+      toast.success("Your order has been placed and is waiting for admin approval.");
       const firstConcreteOrderId = createdOrderIds[0] || "";
       const firstRawOrderId = createdRawOrderIds[0] || 0;
+
+      if (firstConcreteOrderId) {
+        localStorage.setItem("latest_order_approval_id", firstConcreteOrderId);
+        navigate(`/order-approval-status/${encodeURIComponent(firstConcreteOrderId)}`);
+        return;
+      }
+
       navigate("/order-success", {
         state: {
-          orderId: firstConcreteOrderId || (firstRawOrderId ? `RMO-${firstRawOrderId}` : "RAW-MATERIAL-ORDER"),
-          paymentId: method === "CASH_ON_DELIVERY" ? "COD-REGISTERED" : "PAYMENT-SUCCESS",
+          orderId: firstConcreteOrderId || (firstRawOrderId ? `RMO-${firstRawOrderId}` : "ORDER-SUCCESS"),
+          paymentId: paymentId || "COD-REGISTERED",
           selectedOrderId: firstConcreteOrderId,
           selectedRawOrderId: firstRawOrderId || undefined,
         },
@@ -360,134 +764,90 @@ const CheckoutPayment = () => {
     }
   };
 
+  const primaryButtonLabel = loading ? "Processing Order..." : "Place Order";
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      <main className="max-w-7xl mx-auto px-6 pt-24 pb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <section className="lg:col-span-3 bg-white rounded-2xl border border-gray-200 shadow-md p-6">
-            <h1 className="text-2xl font-bold text-gray-900">Checkout</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              {isExistingOrderPayment
-                ? "Choose payment method to complete this existing order."
-                : "Enter delivery and payment details, then complete order."}
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)]">
+      <main className="mx-auto max-w-7xl px-4 pb-12 pt-24 sm:px-6 lg:px-8">
+        <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600">Secure Checkout</p>
+            <h1 className="mt-2 text-3xl font-bold text-slate-900">Checkout Payment</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Review your delivery details, confirm order items, and complete payment through a streamlined e-commerce checkout.
             </p>
-
-            {isExistingOrderPayment ? (
-              <div className="mt-6 rounded-xl border border-gray-200 p-4">
-                <p className="font-semibold text-gray-900">{paymentState?.existingOrderLabel || existingOrderId}</p>
-                <p className="text-sm text-gray-600 mt-1">Existing order payment</p>
-                <p className="text-sm text-gray-700 mt-2">Amount: Rs.{existingOrderAmount.toFixed(2)}</p>
-                <p className="text-xs text-gray-500 mt-1">Address: {paymentState?.existingAddress || "-"}</p>
-                <p className="text-xs text-gray-500 mt-1">Delivery Date: {paymentState?.existingDeliveryDate || "-"}</p>
-              </div>
-            ) : cart.length === 0 ? (
-              <div className="mt-6">
-                <p className="text-gray-600">Cart is empty.</p>
-                <button onClick={() => navigate("/purchaseproduct")} className="mt-3 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold">
-                  Back to Products
-                </button>
-              </div>
-            ) : (
-              <div className="mt-6 space-y-3">
-                {cart.map((item) => (
-                  <div key={item.key} className="rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-gray-900">{item.name}</p>
-                        <p className="text-xs text-gray-500">{item.itemType === "concrete" ? "Concrete Product" : "Raw Material"}</p>
-                      </div>
-                      <button onClick={() => removeItem(item.key)} className="text-xs px-3 py-1.5 rounded-md bg-red-100 text-red-700">
-                        Remove
-                      </button>
-                    </div>
-                    <div className="mt-3 flex items-center gap-3">
-                      <input type="number" min={1} value={item.quantity} onChange={(e) => updateQty(item.key, Number(e.target.value))} className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                      <div className="text-sm text-gray-700">
-                        <p>{item.pricePerUnit > 0 ? `Rs.${item.pricePerUnit} / ${item.unit}` : `${item.unit}`}</p>
-                        {item.pricePerUnit > 0 && (
-                          <p className="text-xs font-semibold text-gray-800 mt-1">
-                            Amount: Rs.{(item.pricePerUnit * item.quantity).toFixed(2)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-md p-6 h-fit">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Delivery and Payment</h2>
-            {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 px-3 py-2 text-sm">{error}</div>}
-
-            <div className="space-y-3">
-              {!isExistingOrderPayment && (
-                <>
-                  <textarea rows={3} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                  <input type="datetime-local" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                </>
-              )}
-
-              <div className="grid grid-cols-1 gap-2">
-                <button type="button" onClick={() => setMethod("UPI")} className={`px-3 py-2 rounded-lg text-sm font-semibold border ${method === "UPI" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 border-gray-300"}`}>UPI</button>
-                <button type="button" onClick={() => setMethod("BANK_TRANSFER")} className={`px-3 py-2 rounded-lg text-sm font-semibold border ${method === "BANK_TRANSFER" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 border-gray-300"}`}>Bank Transfer</button>
-                <button type="button" onClick={() => setMethod("CASH_ON_DELIVERY")} className={`px-3 py-2 rounded-lg text-sm font-semibold border ${method === "CASH_ON_DELIVERY" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 border-gray-300"}`}>Cash on Delivery</button>
-                {!isExistingOrderPayment && (
-                  <button type="button" onClick={() => setMethod("PAY_LATER")} className={`px-3 py-2 rounded-lg text-sm font-semibold border ${method === "PAY_LATER" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-700 border-gray-300"}`}>Pay Later</button>
-                )}
-              </div>
-
-              {method === "UPI" && (
-                <input type="text" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="UPI ID (example: name@okaxis)" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-              )}
-
-              {method === "BANK_TRANSFER" && (
-                <div className="space-y-2">
-                  <input type="text" value={bankAccountName} onChange={(e) => setBankAccountName(e.target.value)} placeholder="Account Holder Name" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                  <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Bank Name" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                  <input type="text" value={bankAccountNo} onChange={(e) => setBankAccountNo(e.target.value)} placeholder="Account Number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                  <input type="text" value={bankIfsc} onChange={(e) => setBankIfsc(e.target.value)} placeholder="IFSC Code" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase" />
-                  <input type="text" value={bankUtr} onChange={(e) => setBankUtr(e.target.value)} placeholder="UTR / Reference Number" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-                </div>
-              )}
-
-              {!isExistingOrderPayment && method === "PAY_LATER" && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-                  <p className="text-sm font-semibold text-amber-900">Select credit period</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCreditDays(15)}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${creditDays === 15 ? "bg-amber-600 text-white border-amber-600" : "bg-white text-amber-900 border-amber-300"}`}
-                    >
-                      7 to 15 Days
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCreditDays(30)}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${creditDays === 30 ? "bg-amber-600 text-white border-amber-600" : "bg-white text-amber-900 border-amber-300"}`}
-                    >
-                      15 to 30 Days
-                    </button>
-                  </div>
-                  <p className="text-xs text-amber-800">
-                    The request goes to admin for credit approval before scheduling and dispatch.
-                  </p>
-                </div>
-              )}
-
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
-                <p className="font-semibold text-gray-900">Order Value: Rs.{estimatedTotal.toFixed(2)}</p>
-                <p className="text-gray-600 mt-1">Concrete Payment Value: Rs.{concreteTotal.toFixed(2)}</p>
-              </div>
-
-              <button type="button" disabled={loading || (!isExistingOrderPayment && cart.length === 0)} onClick={handlePlaceOrderAndPay} className="w-full px-4 py-3 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60">
-                {loading ? "Processing..." : method === "PAY_LATER" ? "Continue Pay Later" : "Pay and Place Order"}
-              </button>
-            </div>
-          </section>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+            <p className="font-semibold text-slate-900">{isExistingOrderPayment ? "Existing Order Payment" : "Cart Checkout"}</p>
+            <p className="mt-1">{formatCurrency(totalAmount)} payable today</p>
+          </div>
         </div>
+
+        {error && (
+          <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+            {error}
+          </div>
+        )}
+
+        {!isExistingOrderPayment && cart.length === 0 ? (
+          <section className={`${cardShell} text-center`}>
+            <h2 className="text-xl font-bold text-slate-900">Your cart is empty</h2>
+            <p className="mt-2 text-sm text-slate-600">Add products to your cart before proceeding to checkout.</p>
+            <button
+              type="button"
+              onClick={() => navigate("/purchaseproduct")}
+              className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Back to Products
+            </button>
+          </section>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(320px,3fr)] lg:items-start">
+            <div className="space-y-6">
+              <DeliveryAddressCard
+                customerName={customerName}
+                setCustomerName={setCustomerName}
+                phoneNumber={phoneNumber}
+                setPhoneNumber={setPhoneNumber}
+                email={email}
+                setEmail={setEmail}
+                address={address}
+                setAddress={setAddress}
+                deliveryDate={deliveryDate}
+                setDeliveryDate={setDeliveryDate}
+                disabledDeliveryDate={isExistingOrderPayment}
+              />
+
+              <OrderDetailsCard
+                cart={cart}
+                isExistingOrderPayment={isExistingOrderPayment}
+                paymentState={paymentState}
+                updateQty={updateQty}
+                removeItem={removeItem}
+              />
+
+              <PaymentMethodCard
+                method={method}
+                setMethod={setMethod}
+                creditDays={creditDays}
+                setCreditDays={setCreditDays}
+                allowPayLater={!isExistingOrderPayment}
+                allowCashOnDelivery={!isExistingOrderPayment}
+              />
+            </div>
+
+            <OrderSummaryCard
+              subtotal={subtotal}
+              deliveryCharges={deliveryCharges}
+              tax={tax}
+              totalAmount={totalAmount}
+              loading={loading}
+              disabled={loading || (!isExistingOrderPayment && cart.length === 0)}
+              buttonLabel={primaryButtonLabel}
+              onSubmit={() => void handlePlaceOrderAndPay()}
+            />
+          </div>
+        )}
       </main>
     </div>
   );

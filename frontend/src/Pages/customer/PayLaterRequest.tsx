@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../../api/api";
 
 type CartItem = {
   key: string;
@@ -58,6 +59,8 @@ const PayLaterRequest = () => {
   const creditDays = state?.creditDays || 15;
   const concreteItems = cart.filter((item) => item.itemType === "concrete");
   const total = concreteItems.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
+  const orderDate = new Date();
+  const expectedDueDate = new Date(orderDate.getTime() + creditDays * 24 * 60 * 60 * 1000);
 
   const submitRequest = async () => {
     setError("");
@@ -81,7 +84,7 @@ const PayLaterRequest = () => {
       const createdOrders: CreatedConcreteOrder[] = [];
 
       for (const item of concreteItems) {
-        const response = await fetch("http://localhost:8080/api/orders/create", {
+        const response = await fetch(`${API_BASE_URL}/api/orders/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -107,7 +110,7 @@ const PayLaterRequest = () => {
       localStorage.removeItem(CART_KEY);
       navigate("/pay-later-orders", {
         state: {
-          successMessage: `Pay later request submitted for ${creditDays} days. Waiting for admin approval.`,
+          successMessage: `Order submitted. Status: Pending Admin Credit Approval (${creditDays} days).`,
           selectedOrderId: createdOrders[0]?.orderId || "",
         },
       });
@@ -122,9 +125,9 @@ const PayLaterRequest = () => {
     <div className="min-h-screen bg-gray-100">
       <main className="max-w-4xl mx-auto px-6 pt-28 pb-10 space-y-6">
         <section className="bg-white rounded-2xl shadow-md p-6">
-          <h1 className="text-2xl font-bold text-gray-900">Pay Later Request</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Pay Later Confirmation</h1>
           <p className="text-sm text-gray-600 mt-1">
-            This order will go to admin for credit approval before scheduling.
+            Review credit details before confirming this pay later order request.
           </p>
         </section>
 
@@ -137,9 +140,12 @@ const PayLaterRequest = () => {
         <section className="bg-white rounded-2xl shadow-md p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
             <p><span className="font-semibold">Customer:</span> {localStorage.getItem("username") || "-"}</p>
+            <p><span className="font-semibold">Customer ID:</span> {localStorage.getItem("userId") || "-"}</p>
             <p><span className="font-semibold">Phone:</span> {localStorage.getItem("userNumber") || "-"}</p>
             <p><span className="font-semibold">Email:</span> {localStorage.getItem("userEmail") || "-"}</p>
-            <p><span className="font-semibold">Requested Credit:</span> {creditDays} days</p>
+            <p><span className="font-semibold">Selected Credit Period:</span> {creditDays === 15 ? "7 - 15 Days" : "15 - 30 Days"}</p>
+            <p><span className="font-semibold">Order Date:</span> {orderDate.toLocaleString()}</p>
+            <p><span className="font-semibold">Expected Payment Due Date:</span> {expectedDueDate.toLocaleString()}</p>
             <p className="md:col-span-2"><span className="font-semibold">Delivery Address:</span> {address || "-"}</p>
             <p className="md:col-span-2"><span className="font-semibold">Delivery Date:</span> {deliveryDate || "-"}</p>
           </div>
@@ -157,9 +163,10 @@ const PayLaterRequest = () => {
           </div>
 
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-sm font-semibold text-amber-900">Credit Flow</p>
+            <p className="text-sm font-semibold text-amber-900">Credit Request Summary</p>
             <p className="text-sm text-amber-800 mt-1">
-              Customer submits request, admin reviews credit, then order becomes approved or rejected. If rejected, pay from Billing & Payment to continue.
+              After confirmation, order status will be <span className="font-semibold">Pending Admin Credit Approval</span>.
+              Admin will approve or reject the request before scheduling and dispatch.
             </p>
             <p className="text-sm font-semibold text-amber-900 mt-3">Request Total: Rs.{total.toFixed(2)}</p>
           </div>
@@ -178,7 +185,7 @@ const PayLaterRequest = () => {
               onClick={submitRequest}
               className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold disabled:opacity-60"
             >
-              {loading ? "Submitting..." : "Submit Pay Later Request"}
+              {loading ? "Submitting..." : "Confirm Pay Later Order"}
             </button>
           </div>
         </section>

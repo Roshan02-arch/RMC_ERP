@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import Login from "./Pages/auth/Login";
 import Logout from "./Pages/auth/Logout";
 import Register from "./Pages/auth/Register";
@@ -11,9 +13,14 @@ import BillingPayment from "./Pages/customer/BillingPayment";
 import QualityAccess from "./Pages/customer/QualityAccess";
 import OrderSuccess from "./Pages/customer/OrderSuccess";
 import CheckoutPayment from "./Pages/customer/CheckoutPayment";
+import OrderApprovalStatus from "./Pages/customer/OrderApprovalStatus";
 import Notifications from "./Pages/customer/Notifications";
+import PayLaterRequest from "./Pages/customer/PayLaterRequest";
+import PayLaterOrders from "./Pages/customer/PayLaterOrders";
+import PayLaterOrderDetails from "./Pages/customer/PayLaterOrderDetails";
 import AdminDashboard from "./Pages/admin/AdminDashboard";
 import AdminOrders from "./Pages/admin/AdminOrders";
+import AdminCreditOrders from "./Pages/admin/AdminCreditOrders";
 import AdminUsers from "./Pages/admin/AdminUsers";
 import AdminLogins from "./Pages/admin/AdminLogins";
 import AdminSchedule from "./Pages/admin/AdminSchedule";
@@ -22,6 +29,7 @@ import AdminFinance from "./Pages/admin/AdminFinance";
 import AdminQualityControl from "./Pages/admin/AdminQualityControl";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
+import AdminLayout from "./components/AdminLayout";
 import HomePage from "./Pages/customer/HomePage";
 import CustomizeProfile from "./Pages/customer/CustomizeProfile";
 import AboutUsPage from "./Pages/customer/AboutUsPage";
@@ -31,6 +39,15 @@ import AdminMaintenance from "./Pages/admin/AdminMaintenance";
 function App() {
   return (
     <BrowserRouter>
+      <ToastContainer
+        position="top-center"
+        autoClose={3000}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable
+        toastClassName="rounded-lg shadow-md"
+      />
       <Routes>
         <Route path="/" element={<HomePage />} />
 
@@ -55,7 +72,13 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/purchaseproduct" element={<PurchaseProduct />} />
           <Route path="/checkout-payment" element={<CheckoutPayment />} />
+          <Route path="/order-approval-status" element={<OrderApprovalStatus />} />
+          <Route path="/order-approval-status/:orderId" element={<OrderApprovalStatus />} />
+          <Route path="/pay-later-request" element={<PayLaterRequest />} />
+          <Route path="/pay-later-orders" element={<PayLaterOrders />} />
+          <Route path="/pay-later-orders/:orderId" element={<PayLaterOrderDetails />} />
           <Route path="/delivery-tracking" element={<DeliveryTracking />} />
+          <Route path="/order-tracking/:orderId" element={<DeliveryTracking />} />
           <Route path="/billing-payment" element={<BillingPayment />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
@@ -68,81 +91,21 @@ function App() {
           path="/admin"
           element={
             <ProtectedRoute role="ADMIN">
-              <AdminDashboard />
+              <AdminLayout />
             </ProtectedRoute>
           }
-        />
-
-        <Route
-          path="/admin/orders"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminOrders />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/users"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminUsers />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/adminlogins"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminLogins />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/schedule"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminSchedule />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/inventory"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminInventory />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/finance"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminFinance />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin/quality-control"
-          element={
-            <ProtectedRoute role="ADMIN">
-              <AdminQualityControl />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-                  path="/admin/maintenance"
-                  element={
-                    <ProtectedRoute role="ADMIN">
-                      <AdminMaintenance />
-                    </ProtectedRoute>
-                  }
-                />
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="credit-orders" element={<AdminCreditOrders />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="adminlogins" element={<AdminLogins />} />
+          <Route path="schedule" element={<AdminSchedule />} />
+          <Route path="inventory" element={<AdminInventory />} />
+          <Route path="finance" element={<AdminFinance />} />
+          <Route path="quality-control" element={<AdminQualityControl />} />
+          <Route path="maintenance" element={<AdminMaintenance />} />
+        </Route>
 
       </Routes>
     </BrowserRouter>

@@ -9,3 +9,7 @@
     transform: scaleX(0);
   }
 }
+
+.admin-outlet-root aside {
+  display: none !important;
+}

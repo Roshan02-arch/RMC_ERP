@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiBell } from "react-icons/fi";
+import { toast } from "react-toastify";
 import { normalizeRole } from "../../utils/auth";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
@@ -88,7 +89,6 @@ const PurchaseProduct = () => {
   const reminderStorageKey = `restock_reminders_${currentUserId}`;
   const [selectedTab, setSelectedTab] = useState<"concrete" | "material">("concrete");
   const [error, setError] = useState("");
-  const [toast, setToast] = useState("");
 
   const [orders, setOrders] = useState<ConcreteOrder[]>([]);
   const [materialOrders, setMaterialOrders] = useState<RawMaterialOrder[]>([]);
@@ -103,11 +103,6 @@ const PurchaseProduct = () => {
   );
   const previousProductQtyRef = useRef<Record<number, number>>({});
 
-  const showToast = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 1500);
-  };
-
   const isReminderEnabled = (productId: number) => restockReminderIds.includes(productId);
 
   const toggleRestockReminder = async (product: ProductStock) => {
@@ -118,12 +113,12 @@ const PurchaseProduct = () => {
     const alreadyEnabled = restockReminderIds.includes(product.id);
     if (alreadyEnabled) {
       setRestockReminderIds((prev) => prev.filter((id) => id !== product.id));
-      showToast(`Reminder removed for ${product.name}`);
+      toast.info(`Reminder removed for ${product.name}`);
       return;
     }
 
     setRestockReminderIds((prev) => [...prev, product.id]);
-    showToast(`Reminder set for ${product.name}`);
+    toast.success(`Reminder set for ${product.name}`);
 
     if ("Notification" in window && Notification.permission === "default") {
       try {
@@ -187,7 +182,7 @@ const PurchaseProduct = () => {
     }
 
     saveCart(nextCart);
-    showToast(`${product.name} added to cart`);
+    toast.success("Product added to cart successfully");
   };
 
   const addMaterialToCart = (material: RawMaterial) => {
@@ -229,7 +224,7 @@ const PurchaseProduct = () => {
     }
 
     saveCart(nextCart);
-    showToast(`${material.name} added to cart`);
+    toast.success("Product added to cart successfully");
   };
 
   const fetchProducts = async () => {
@@ -254,7 +249,7 @@ const PurchaseProduct = () => {
         });
 
         if (restockedIds.length > 0) {
-          showToast(`${restockedNames.join(", ")} restocked`);
+          toast.success(`${restockedNames.join(", ")} restocked`);
           if ("Notification" in window && Notification.permission === "granted") {
             try {
               new Notification("RMC ERP Restock Alert", {
@@ -399,11 +394,6 @@ const PurchaseProduct = () => {
               >
                 Go To Cart
               </button>
-              {toast && (
-                <div className="rounded-lg bg-green-600 text-white px-4 py-2 text-sm font-semibold">
-                  {toast}
-                </div>
-              )}
             </div>
           </div>
 

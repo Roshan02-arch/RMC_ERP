@@ -6,7 +6,9 @@ import com.demo.entity.Order;
 import com.demo.entity.OrderNotification;
 import com.demo.entity.OrderStatus;
 import com.demo.repository.OrderNotificationRepository;
+import com.demo.repository.OrderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +22,79 @@ public class OrderNotificationService {
 
     @Autowired
     private OrderNotificationRepository orderNotificationRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Scheduled(cron = "0 0 10 * * *")
+    @Transactional
+    public void sendPayLaterReminders() {
+        LocalDateTime now = LocalDateTime.now();
+        for (Order order : orderRepository.findAll()) {
+            if (order == null || order.getUser() == null || order.getUser().getId() == null) {
+                continue;
+            }
+
+            boolean isPayLater = "PAY_LATER".equalsIgnoreCase(String.valueOf(order.getPaymentOption()))
+                    || "PAY_LATER".equalsIgnoreCase(String.valueOf(order.getPaymentType()));
+            if (!isPayLater) {
+                continue;
+            }
+
+            if (order.getPaymentReceivedAt() != null) {
+                continue;
+            }
+
+            if ("COMPLETED".equalsIgnoreCase(String.valueOf(order.getOrderWorkflowStatus()))
+                    || "PAYMENT_RECEIVED".equalsIgnoreCase(String.valueOf(order.getOrderWorkflowStatus()))) {
+                continue;
+            }
+
+            String creditApproval = normalize(order.getCreditApprovalStatus());
+            String creditStatus = normalize(order.getCreditStatus());
+            if (!("approved".equals(creditApproval) || "approved".equals(creditStatus))) {
+                continue;
+            }
+
+            String workflow = normalize(order.getOrderWorkflowStatus());
+            if ("completed".equals(workflow)) {
+                continue;
+            }
+
+            LocalDateTime referenceTime = order.getCreditRequestedAt() != null
+                    ? order.getCreditRequestedAt()
+                    : order.getCreatedAt();
+
+            if (referenceTime == null || now.isBefore(referenceTime.plusDays(2))) {
+                continue;
+            }
+
+            OrderNotification latestReminder = orderNotificationRepository
+                    .findTopByUserIdAndOrderIdAndTypeOrderByCreatedAtDesc(
+                            order.getUser().getId(),
+                            order.getOrderId() == null ? "" : order.getOrderId(),
+                            NotificationType.PAY_LATER_REMINDER
+                    )
+                    .orElse(null);
+
+            if (latestReminder != null
+                    && latestReminder.getCreatedAt() != null
+                    && latestReminder.getCreatedAt().isAfter(now.minusDays(2))) {
+                continue;
+            }
+
+            String dueText = order.getCreditDueDate() == null
+                    ? ""
+                    : " Due date: " + order.getCreditDueDate();
+
+            String reminderMessage = "Pay Later reminder: payment is pending for order "
+                    + (order.getOrderId() == null ? "" : order.getOrderId())
+                    + "."
+                    + dueText;
+
+            createNotification(order, NotificationType.PAY_LATER_REMINDER, reminderMessage);
+        }
+    }
 
     public void logOrderUpdate(Order order, DeliveryTrackingStatus trackingStatus, String message) {
         NotificationType type = resolveType(order, trackingStatus, message);
@@ -38,13 +113,15 @@ public class OrderNotificationService {
             return;
         }
 
+        NotificationType persistedType = toPersistedType(type);
+
         String orderId = order.getOrderId() == null ? "" : order.getOrderId().trim();
         Long userId = order.getUser().getId();
         String title = getTitle(type);
         String message = isBlank(messageOverride) ? getDefaultMessage(type) : messageOverride.trim();
 
         OrderNotification latestOfSameType = orderNotificationRepository
-                .findTopByUserIdAndOrderIdAndTypeOrderByCreatedAtDesc(userId, orderId, type)
+                .findTopByUserIdAndOrderIdAndTypeOrderByCreatedAtDesc(userId, orderId, persistedType)
                 .orElse(null);
 
         if (latestOfSameType != null
@@ -59,10 +136,18 @@ public class OrderNotificationService {
         notification.setOrderId(orderId);
         notification.setTitle(title);
         notification.setMessage(message);
-        notification.setType(type);
+        notification.setType(persistedType);
         notification.setRead(false);
         notification.setCreatedAt(LocalDateTime.now());
         orderNotificationRepository.save(notification);
+    }
+
+    private NotificationType toPersistedType(NotificationType type) {
+        return switch (type) {
+            case PAY_LATER_REQUESTED, CREDIT_REJECTED, PAY_LATER_REMINDER -> NotificationType.DELIVERY_STATUS_UPDATED;
+            case CREDIT_APPROVED -> NotificationType.ORDER_APPROVED;
+            default -> type;
+        };
     }
 
     public List<OrderNotification> getNotificationsByUser(Long userId) {
@@ -109,6 +194,23 @@ public class OrderNotificationService {
 
         if (normalizedMessage.contains("vehicle") && normalizedMessage.contains("driver")) {
             return NotificationType.VEHICLE_ASSIGNED;
+        }
+
+        if (normalizedMessage.contains("pending admin credit approval")) {
+            return NotificationType.PAY_LATER_REQUESTED;
+        }
+
+        if (normalizedMessage.contains("credit approved")) {
+            return NotificationType.CREDIT_APPROVED;
+        }
+
+        if (normalizedMessage.contains("credit request rejected")
+                || normalizedMessage.contains("rejected credit")) {
+            return NotificationType.CREDIT_REJECTED;
+        }
+
+        if (normalizedMessage.contains("pay later reminder")) {
+            return NotificationType.PAY_LATER_REMINDER;
         }
 
         if (order == null) {
@@ -171,6 +273,10 @@ public class OrderNotificationService {
 
     private String getTitle(NotificationType type) {
         return switch (type) {
+            case PAY_LATER_REQUESTED -> "Pay Later Requested";
+            case CREDIT_APPROVED -> "Credit Approved";
+            case CREDIT_REJECTED -> "Credit Rejected";
+            case PAY_LATER_REMINDER -> "Pay Later Reminder";
             case ORDER_APPROVED -> "Order Approved";
             case IN_PRODUCTION -> "In Production";
             case DISPATCH_SCHEDULED -> "Dispatch Scheduled";
@@ -183,6 +289,10 @@ public class OrderNotificationService {
 
     private String getDefaultMessage(NotificationType type) {
         return switch (type) {
+            case PAY_LATER_REQUESTED -> "Your Pay Later request is pending admin credit approval.";
+            case CREDIT_APPROVED -> "Credit approved. Please pay before due date.";
+            case CREDIT_REJECTED -> "Credit request rejected. Please complete payment to process your order.";
+            case PAY_LATER_REMINDER -> "Reminder: Pay Later payment is pending.";
             case ORDER_APPROVED -> "Your order has been approved.";
             case IN_PRODUCTION -> "Your order is now in production.";
             case DISPATCH_SCHEDULED -> "Your dispatch has been scheduled.";
