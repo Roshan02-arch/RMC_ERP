@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { NavLink, Link, useNavigate } from "react-router-dom";
 
 type UserNavbarProps = {
   variant?: "overlay" | "solid";
@@ -14,6 +14,10 @@ type UserProfile = {
 
 const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
   const navigate = useNavigate();
+  const navItemClass = ({ isActive }: { isActive: boolean }) =>
+               isActive
+                 ? "text-indigo-300 border-b-2 border-indigo-300 pb-1"
+                 : "transition hover:text-indigo-300";
   const role = localStorage.getItem("role");
   const userId = localStorage.getItem("userId");
   const rawUsername = localStorage.getItem("username");
@@ -110,21 +114,18 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
   return (
     <div className={`fixed top-0 left-0 right-0 z-50 ${barClass}`}>
       <div className={`max-w-7xl mx-auto px-6 py-4 flex items-center justify-end gap-6 text-sm font-medium ${textClass}`}>
-        <Link to="/home" className={`${hoverClass} transition`}>
+        <NavLink to="/home" end className={`${hoverClass} transition`}>
           Home
-        </Link>
-        <Link to="/dashboard" className={`${hoverClass} transition`}>
-          Dashboard
-        </Link>
-        <Link to="/purchaseproduct" className={`${hoverClass} transition`}>
-          Purchase Product
-        </Link>
-        <Link to="/about-us" className={`${hoverClass} transition`}>
+        </NavLink>
+        <NavLink to="/about-us" className={navItemClass}>
           About Us
-        </Link>
-        <Link to="/contact-us" className={`${hoverClass} transition`}>
+        </NavLink>
+        <NavLink to="/purchaseproduct" className={navItemClass}>
+                  Purchase Product
+                </NavLink>
+        <NavLink to="/contact-us" className={navItemClass}>
           Contact Us
-        </Link>
+        </NavLink>
         {displayName && <span className="text-indigo-300">Welcome, {displayName}</span>}
         <button
           type="button"
