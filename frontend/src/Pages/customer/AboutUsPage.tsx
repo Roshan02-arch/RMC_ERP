@@ -1,5 +1,5 @@
 import { useState, type SyntheticEvent } from "react";
-import { Link } from "react-router-dom";
+import { NavLink, Link, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import { FaCircleCheck } from "react-icons/fa6";
 import UserNavbar from "../../components/UserNavbar";
@@ -7,6 +7,11 @@ import GlobalFooter from "../../components/GlobalFooter";
 import aboutImage from "../../images/about.jpg";
 
 const AboutUsPage = () => {
+     const navigate = useNavigate();
+       const navItemClass = ({ isActive }: { isActive: boolean }) =>
+              isActive
+                ? "text-indigo-300 border-b-2 border-indigo-300 pb-1"
+                : "transition hover:text-indigo-300";
   const [showMore, setShowMore] = useState(false);
   const role = normalizeRole(localStorage.getItem("role"));
 
@@ -22,21 +27,21 @@ const AboutUsPage = () => {
       ) : (
         <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-6 py-4 flex justify-end gap-6 text-sm font-medium text-gray-700">
-            <Link to="/" className="hover:text-indigo-600 transition">
+            <NavLink to="/" end className={navItemClass}>
               Home
-            </Link>
-            <Link to="/about-us" className="text-indigo-600">
+            </NavLink>
+        <NavLink to="/about-us" className={navItemClass}>
               About Us
-            </Link>
-            <Link to="/contact-us" className="hover:text-indigo-600 transition">
+            </NavLink>
+            <NavLink to="/contact-us" className={navItemClass}>
               Contact Us
-            </Link>
-            <Link to="/login" className="hover:text-indigo-600 transition">
+            </NavLink>
+            <NavLink to="/login" className={navItemClass}>
               Login
-            </Link>
-            <Link to="/register" className="hover:text-indigo-600 transition">
+            </NavLink>
+            <NavLink to="/register" className={navItemClass}>
               Register
-            </Link>
+            </NavLink>
           </div>
         </div>
       )}

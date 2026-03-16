@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { NavLink, Link, useNavigate } from "react-router-dom";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -908,6 +908,10 @@ function QuantumBackground() {
 
 const Login = () => {
   const navigate = useNavigate();
+  const navItemClass = ({ isActive }: { isActive: boolean }) =>
+            isActive
+              ? "text-indigo-300 border-b-2 border-indigo-300 pb-1"
+              : "transition hover:text-indigo-300";
 
   const floatingSymbols = [
     { icon: "⌨️", top: "15%", left: "10%", delay: "0s", duration: "6s" },
@@ -1030,15 +1034,22 @@ const Login = () => {
 
       <div className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/20 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-end gap-6 px-6 py-4 text-sm font-medium text-white/80">
-          <Link to="/" className="transition hover:text-indigo-300">
+          <NavLink to="/" className={navItemClass}>
             Home
-          </Link>
-          <Link to="/register" className="transition hover:text-indigo-300">
-            Register
-          </Link>
-          <Link to="/login" className="text-indigo-300">
+          </NavLink>
+          <NavLink to="/about-us" className={navItemClass}>
+                                          AboutUs
+                                        </NavLink>
+                                        <NavLink to="/contact-us" className={navItemClass}>
+                                                    ContactUs
+                                                  </NavLink>
+
+          <NavLink to="/login" className={navItemClass}>
             Login
-          </Link>
+          </NavLink>
+<NavLink to="/register" className={navItemClass}>
+            Register
+          </NavLink>
         </div>
       </div>
 

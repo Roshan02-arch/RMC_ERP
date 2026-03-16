@@ -1,11 +1,53 @@
-import { Link } from "react-router-dom";
+import { NavLink, Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import axios from "axios";
 import { normalizeRole } from "../../utils/auth";
 import UserNavbar from "../../components/UserNavbar";
 import { FaEnvelope, FaLocationDot, FaPhoneVolume } from "react-icons/fa6";
 import GlobalFooter from "../../components/GlobalFooter";
+import { useCenteredDialog } from "../../hooks/useCenteredDialog";
+
 
 const ContactUsPage = () => {
+    const navigate = useNavigate();
+      const navItemClass = ({ isActive }: { isActive: boolean }) =>
+             isActive
+               ? "text-indigo-300 border-b-2 border-indigo-300 pb-1"
+               : "transition hover:text-indigo-300";
   const role = normalizeRole(localStorage.getItem("role"));
+  const { showMessage, dialogNode } = useCenteredDialog();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    message: "",
+  });
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const response = await axios.post(
+        "http://localhost:8080/api/contact",
+        formData
+      );
+
+await showMessage("Message sent successfully!");
+      setFormData({
+        name: "",
+        email: "",
+        message: "",
+      });
+
+    } catch (error) {
+      console.error(error);
+      alert("Error sending message");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50 to-indigo-50">
@@ -14,21 +56,21 @@ const ContactUsPage = () => {
       ) : (
         <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-6 py-4 flex justify-end gap-6 text-sm font-medium text-gray-700">
-            <Link to="/" className="hover:text-indigo-600 transition">
+            <NavLink to="/" className={navItemClass}>
               Home
-            </Link>
-            <Link to="/about-us" className="hover:text-indigo-600 transition">
+            </NavLink>
+            <NavLink to="/about-us" className={navItemClass}>
               About Us
-            </Link>
-            <Link to="/contact-us" className="text-indigo-600">
+            </NavLink>
+            <NavLink to="/contact-us" className={navItemClass}>
               Contact Us
-            </Link>
-            <Link to="/login" className="hover:text-indigo-600 transition">
+            </NavLink>
+            <NavLink to="/login" className={navItemClass}>
               Login
-            </Link>
-            <Link to="/register" className="hover:text-indigo-600 transition">
+            </NavLink>
+            <NavLink to="/register" className={navItemClass}>
               Register
-            </Link>
+            </NavLink>
           </div>
         </div>
       )}
@@ -58,7 +100,7 @@ const ContactUsPage = () => {
                   <FaLocationDot className="text-blue-600 text-lg mt-1 shrink-0" />
                   <div>
                     <p className="text-sm uppercase tracking-wide text-slate-500">Address</p>
-                    <p className="text-slate-800 font-medium">123 RMC Industrial Park, Pune, Maharashtra 411001</p>
+                    <p className="text-slate-800 font-medium">Gate No 135/1, Naigaon, At Post Bramhanwade, Tal - Sinnar,Dist - Nashik, Maharashtra 422003</p>
                   </div>
                 </div>
 
@@ -74,7 +116,7 @@ const ContactUsPage = () => {
                   <FaEnvelope className="text-blue-600 text-lg mt-1 shrink-0" />
                   <div>
                     <p className="text-sm uppercase tracking-wide text-slate-500">Email</p>
-                    <p className="text-slate-800 font-medium">support@rmcerp-demo.com</p>
+                    <p className="text-slate-800 font-medium">rryinfra@gmail.com</p>
                   </div>
                 </div>
               </div>
@@ -82,30 +124,39 @@ const ContactUsPage = () => {
 
             <div className="rounded-2xl bg-white border border-slate-200 shadow-md p-5 md:p-6 transition hover:shadow-xl">
               <h2 className="text-xl md:text-2xl font-semibold text-slate-900">Send a Message</h2>
-              <p className="text-slate-500 text-sm mt-1">Demo form with dummy data.</p>
 
               <div className="mt-5 space-y-3">
                 <input
                   type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
                   placeholder="Your Name"
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm"
                 />
                 <input
                   type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
                   placeholder="Your Email"
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm"
                 />
-                <textarea
-                  rows={5}
-                  placeholder="Write your message..."
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-                <button
-                  type="button"
-                  className="w-full rounded-lg bg-orange-500 hover:bg-orange-600 text-white py-3 font-semibold transition transform hover:scale-[1.02]"
-                >
-                  Submit
-                </button>
+              <textarea
+                rows={5}
+                name="message"
+                value={formData.message}
+                onChange={handleChange}
+                placeholder="Write your message..."
+                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm"
+              />
+               <button
+                 type="button"
+                 onClick={handleSubmit}
+                 className="w-full rounded-lg bg-orange-500 hover:bg-orange-600 text-white py-3 font-semibold"
+               >
+                 Submit
+               </button>
               </div>
             </div>
           </div>
@@ -113,6 +164,7 @@ const ContactUsPage = () => {
       </main>
 
       <GlobalFooter />
+      {dialogNode}
     </div>
   );
 };
