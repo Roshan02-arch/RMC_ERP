@@ -22,6 +22,9 @@ type Order = {
   latestNotification?: string;
   orderWorkflowStatus?: string;
   paymentReceivedAt?: string;
+  paymentStatus?: string;
+  reminderIntervalDays?: number;
+  lastReminderSentAt?: string;
   createdAt?: string;
   userId?: number;
   customerName?: string;
@@ -36,6 +39,17 @@ const isDueDateReached = (value?: string) => {
   if (Number.isNaN(date.getTime())) return false;
   return date.getTime() <= Date.now();
 };
+const isDueSoon = (value?: string, withinDays = 3) => {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const diff = date.getTime() - Date.now();
+  return diff > 0 && diff <= withinDays * 24 * 60 * 60 * 1000;
+};
+const isPaid = (order: Order) =>
+  !!order.paymentReceivedAt ||
+  String(order.paymentStatus || "").toUpperCase() === "PAID" ||
+  String(order.orderWorkflowStatus || "").toUpperCase() === "PAID";
 
 const PayLaterOrders = () => {
   const navigate = useNavigate();
@@ -110,8 +124,11 @@ const PayLaterOrders = () => {
             const approved = String(order.creditApprovalStatus || "").toUpperCase() === "APPROVED";
             const completedWorkflow = String(order.orderWorkflowStatus || "").toUpperCase() === "COMPLETED";
             const dueDateReached = isDueDateReached(order.creditDueDate);
-            const paymentPending = !order.paymentReceivedAt;
-            const shouldShowPayNow = rejected || (approved && dueDateReached && paymentPending && !completedWorkflow);
+            const dueSoon = isDueSoon(order.creditDueDate);
+            const paid = isPaid(order);
+            const paymentPending = !paid;
+            const shouldShowPayNow = paymentPending && !completedWorkflow && (rejected || dueDateReached);
+            const showDueSoonWarning = paymentPending && !dueDateReached && dueSoon && approved;
             const canTrack = approved && ["APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED"].includes(String(order.status || "").toUpperCase());
             const completed = String(order.status || "").toUpperCase() === "DELIVERED";
 
@@ -141,9 +158,27 @@ const PayLaterOrders = () => {
                   <p><span className="font-semibold">Approval Date:</span> {formatValue(order.creditReviewedAt || order.approvedAt)}</p>
                   <p><span className="font-semibold">Due Date:</span> {formatValue(order.creditDueDate)}</p>
                   <p><span className="font-semibold">Order Value:</span> Rs.{Number(order.totalPrice || 0).toFixed(2)}</p>
+                  <p><span className="font-semibold">Payment Status:</span>{" "}
+                    <span className={paid ? "text-emerald-700 font-semibold" : dueDateReached ? "text-red-700 font-semibold" : "text-amber-700 font-semibold"}>
+                      {paid ? "PAID" : dueDateReached ? "OVERDUE" : "PENDING"}
+                    </span>
+                  </p>
                   <p><span className="font-semibold">Payment Received:</span> {formatValue(order.paymentReceivedAt)}</p>
+                  <p><span className="font-semibold">Reminder Every:</span> {order.reminderIntervalDays || 2} day(s)</p>
+                  <p><span className="font-semibold">Last Reminder:</span> {formatValue(order.lastReminderSentAt)}</p>
                   <p><span className="font-semibold">Admin Detail:</span> {order.creditReviewRemark || order.latestNotification || "-"}</p>
                 </div>
+
+                {showDueSoonWarning && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm text-amber-800 font-semibold">
+                      ⏰ Payment due soon — Due: {formatValue(order.creditDueDate)}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Please arrange payment before the due date to avoid daily reminders.
+                    </p>
+                  </div>
+                )}
 
                 {shouldShowPayNow && (
                   <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 flex flex-wrap items-center justify-between gap-3">

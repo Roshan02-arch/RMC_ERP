@@ -115,6 +115,7 @@ public class OrderController {
 
                 order.setPaymentReceivedAt(paidAt);
                 order.setOrderWorkflowStatus("PAID");
+                order.setPaymentStatus("PAID");
                 order.setStatus(OrderStatus.APPROVED);
                 order.setLatestNotification("Payment successful. Your order has been placed successfully.");
                 orderRepository.save(order);
@@ -293,6 +294,8 @@ public class OrderController {
                 order.setOrderWorkflowStatus("WAITING_ADMIN_APPROVAL");
                 order.setStatus(OrderStatus.PENDING_APPROVAL);
                 order.setLatestNotification("Pending admin credit approval");
+                order.setPaymentStatus("PENDING");
+                order.setReminderIntervalDays(2);
             } else {
                 order.setPaymentOption(paymentOption);
                 order.setPaymentType(paymentOption);
@@ -501,6 +504,9 @@ public class OrderController {
         row.put("creditDueDate", order.getCreditDueDate());
         row.put("creditReviewRemark", order.getCreditReviewRemark());
         row.put("paymentReceivedAt", order.getPaymentReceivedAt());
+        row.put("paymentStatus", order.getPaymentStatus() == null ? "PENDING" : order.getPaymentStatus());
+        row.put("reminderIntervalDays", order.getReminderIntervalDays());
+        row.put("lastReminderSentAt", order.getLastReminderSentAt());
         row.put("dispatchDateTime", order.getDispatchDateTime());
         row.put("expectedArrivalTime", order.getExpectedArrivalTime());
         row.put("deliveryTrackingStatus", resolveTrackingStatus(order));

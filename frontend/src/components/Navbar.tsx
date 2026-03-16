@@ -371,6 +371,13 @@ const Navbar = () => {
                   Billing & Payment
                 </NavLink>
                 <NavLink
+                  to="/quotation"
+                  className={menuItemClass}
+                  onClick={() => setShowMenu(false)}
+                >
+                  Quotation
+                </NavLink>
+                <NavLink
                   to="/quality-access"
                   className={menuItemClass}
                   onClick={() => setShowMenu(false)}

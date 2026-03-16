@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 @Service
@@ -26,73 +28,95 @@ public class OrderNotificationService {
     @Autowired
     private OrderRepository orderRepository;
 
-    @Scheduled(cron = "0 0 10 * * *")
+    @Autowired
+    private PayLaterEmailService payLaterEmailService;
+
+    /**
+     * Runs daily at 09:00.
+     * - Every 2 days for PAY_LATER orders where payment is still pending.
+     * - Daily once the credit due date is reached.
+     * Stops automatically when paymentReceivedAt is set (payment completed).
+     */
+    @Scheduled(cron = "0 0 9 * * *")
     @Transactional
     public void sendPayLaterReminders() {
         LocalDateTime now = LocalDateTime.now();
+
         for (Order order : orderRepository.findAll()) {
             if (order == null || order.getUser() == null || order.getUser().getId() == null) {
                 continue;
             }
 
+            // Only PAY_LATER orders
             boolean isPayLater = "PAY_LATER".equalsIgnoreCase(String.valueOf(order.getPaymentOption()))
                     || "PAY_LATER".equalsIgnoreCase(String.valueOf(order.getPaymentType()));
             if (!isPayLater) {
                 continue;
             }
 
+            // Stop if payment already received
             if (order.getPaymentReceivedAt() != null) {
                 continue;
             }
-
-            if ("COMPLETED".equalsIgnoreCase(String.valueOf(order.getOrderWorkflowStatus()))
-                    || "PAYMENT_RECEIVED".equalsIgnoreCase(String.valueOf(order.getOrderWorkflowStatus()))) {
+            if ("PAID".equalsIgnoreCase(order.getPaymentStatus())) {
                 continue;
             }
 
-            String creditApproval = normalize(order.getCreditApprovalStatus());
-            String creditStatus = normalize(order.getCreditStatus());
-            if (!("approved".equals(creditApproval) || "approved".equals(creditStatus))) {
-                continue;
-            }
-
+            // Stop if workflow completed
             String workflow = normalize(order.getOrderWorkflowStatus());
-            if ("completed".equals(workflow)) {
+            if ("completed".equals(workflow) || "payment_received".equals(workflow)) {
                 continue;
             }
 
-            LocalDateTime referenceTime = order.getCreditRequestedAt() != null
-                    ? order.getCreditRequestedAt()
-                    : order.getCreatedAt();
+            LocalDateTime dueDateTime = order.getCreditDueDate();
+            boolean isDueDateReached = (dueDateTime != null && !now.isBefore(dueDateTime));
 
-            if (referenceTime == null || now.isBefore(referenceTime.plusDays(2))) {
+            // Interval: 1 day when due, 2 days otherwise
+            int intervalDays = isDueDateReached ? 1 : 2;
+
+            // Update reminderIntervalDays on the entity if it changed
+            if (!Integer.valueOf(intervalDays).equals(order.getReminderIntervalDays())) {
+                order.setReminderIntervalDays(intervalDays);
+                orderRepository.save(order);
+            }
+
+            // Check last reminder time (use lastReminderSentAt if available, else query notification table)
+            LocalDateTime lastSent = order.getLastReminderSentAt();
+            if (lastSent == null) {
+                OrderNotification lastNotif = orderNotificationRepository
+                        .findTopByUserIdAndOrderIdAndTypeOrderByCreatedAtDesc(
+                                order.getUser().getId(),
+                                order.getOrderId() == null ? "" : order.getOrderId(),
+                                NotificationType.PAY_LATER_REMINDER
+                        )
+                        .orElse(null);
+                lastSent = lastNotif != null ? lastNotif.getCreatedAt() : null;
+            }
+
+            if (lastSent != null && lastSent.isAfter(now.minusDays(intervalDays))) {
                 continue;
             }
 
-            OrderNotification latestReminder = orderNotificationRepository
-                    .findTopByUserIdAndOrderIdAndTypeOrderByCreatedAtDesc(
-                            order.getUser().getId(),
-                            order.getOrderId() == null ? "" : order.getOrderId(),
-                            NotificationType.PAY_LATER_REMINDER
-                    )
-                    .orElse(null);
-
-            if (latestReminder != null
-                    && latestReminder.getCreatedAt() != null
-                    && latestReminder.getCreatedAt().isAfter(now.minusDays(2))) {
-                continue;
+            // Build message
+            String orderId = order.getOrderId() == null ? "" : order.getOrderId();
+            String dueDateStr = dueDateTime == null ? "" : " Due date: " + dueDateTime.toLocalDate();
+            String reminderMessage;
+            if (isDueDateReached) {
+                reminderMessage = "\u26a0\ufe0f Payment due today for order " + orderId
+                        + "! Please complete your payment immediately." + dueDateStr;
+            } else {
+                reminderMessage = "Reminder: Payment is pending for order " + orderId + "." + dueDateStr;
             }
 
-            String dueText = order.getCreditDueDate() == null
-                    ? ""
-                    : " Due date: " + order.getCreditDueDate();
-
-            String reminderMessage = "Pay Later reminder: payment is pending for order "
-                    + (order.getOrderId() == null ? "" : order.getOrderId())
-                    + "."
-                    + dueText;
-
+            // Send in-app notification
             createNotification(order, NotificationType.PAY_LATER_REMINDER, reminderMessage);
+
+            // Send email notification
+            payLaterEmailService.sendPayLaterReminder(order, isDueDateReached);
+
+            // Persist last reminder sent time
+            order.setLastReminderSentAt(now);
+            orderRepository.save(order);
         }
     }
 
@@ -144,18 +168,22 @@ public class OrderNotificationService {
 
     private NotificationType toPersistedType(NotificationType type) {
         return switch (type) {
-            case PAY_LATER_REQUESTED, CREDIT_REJECTED, PAY_LATER_REMINDER -> NotificationType.DELIVERY_STATUS_UPDATED;
+            case PAY_LATER_REQUESTED, CREDIT_REJECTED -> NotificationType.DELIVERY_STATUS_UPDATED;
             case CREDIT_APPROVED -> NotificationType.ORDER_APPROVED;
             default -> type;
         };
     }
 
     public List<OrderNotification> getNotificationsByUser(Long userId) {
-        return orderNotificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<OrderNotification> allRows = orderNotificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        return keepLatestNotifications(allRows);
     }
 
     public long getUnreadCount(Long userId) {
-        return orderNotificationRepository.countByUserIdAndIsReadFalse(userId);
+        return getNotificationsByUser(userId)
+                .stream()
+                .filter(row -> !row.isRead())
+                .count();
     }
 
     @Transactional
@@ -301,6 +329,32 @@ public class OrderNotificationService {
             case ORDER_DELIVERED -> "Your order has been delivered successfully.";
             case ORDER_RETURNED -> "Your order has been marked as returned.";
         };
+    }
+
+    private List<OrderNotification> keepLatestNotifications(List<OrderNotification> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, OrderNotification> latestByKey = new LinkedHashMap<>();
+        for (OrderNotification row : rows) {
+            if (row == null) {
+                continue;
+            }
+
+            String key = buildLatestKey(row);
+            if (!latestByKey.containsKey(key)) {
+                latestByKey.put(key, row);
+            }
+        }
+
+        return latestByKey.values().stream().toList();
+    }
+
+    private String buildLatestKey(OrderNotification row) {
+        String orderId = row.getOrderId() == null ? "" : row.getOrderId().trim();
+        String type = row.getType() == null ? "UNKNOWN" : row.getType().name();
+        return orderId + "|" + type;
     }
 
     private String normalize(String value) {

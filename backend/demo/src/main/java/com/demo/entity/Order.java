@@ -32,6 +32,13 @@ public class Order {
     private LocalDateTime createdAt;
     private LocalDateTime paymentReceivedAt;
 
+    // Pay-later specific fields
+    // "PENDING" | "PAID"
+    private String paymentStatus;
+    // 2 = every 2 days reminder, 1 = daily (when due date reached)
+    private Integer reminderIntervalDays;
+    private LocalDateTime lastReminderSentAt;
+
     private LocalDateTime deliveryDate;
     private LocalDateTime scheduledDate;
     private LocalDateTime approvedAt;
@@ -442,6 +449,30 @@ public class Order {
 
     public void setAssignment(OrderAssignment assignment) {
         this.assignment = assignment;
+    }
+
+    public String getPaymentStatus() {
+        return paymentStatus;
+    }
+
+    public void setPaymentStatus(String paymentStatus) {
+        this.paymentStatus = paymentStatus;
+    }
+
+    public Integer getReminderIntervalDays() {
+        return reminderIntervalDays;
+    }
+
+    public void setReminderIntervalDays(Integer reminderIntervalDays) {
+        this.reminderIntervalDays = reminderIntervalDays;
+    }
+
+    public LocalDateTime getLastReminderSentAt() {
+        return lastReminderSentAt;
+    }
+
+    public void setLastReminderSentAt(LocalDateTime lastReminderSentAt) {
+        this.lastReminderSentAt = lastReminderSentAt;
     }
 
     @PrePersist

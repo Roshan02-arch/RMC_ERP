@@ -10,6 +10,7 @@ const menuItems = [
   { to: "/admin/inventory", label: "Inventory" },
   { to: "/admin/finance", label: "Finance" },
   { to: "/admin/quality-control", label: "Quality Control" },
+  { to: "/admin/quotation", label: "Quotation" },
   { to: "/admin/maintenance", label: "Maintenance" },
 ];
 

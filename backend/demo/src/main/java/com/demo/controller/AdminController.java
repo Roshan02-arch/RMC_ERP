@@ -77,6 +77,38 @@ public class AdminController {
     @Autowired
     private OrderApprovalHistoryRepository approvalHistoryRepository;
 
+    /** Returns all PAY_LATER orders with their payment/reminder status for admin monitoring. */
+    @GetMapping("/pay-later-summary")
+    public ResponseEntity<?> getPayLaterSummary() {
+        List<Map<String, Object>> result = orderRepository.findAll().stream()
+                .filter(o -> "PAY_LATER".equalsIgnoreCase(o.getPaymentOption())
+                        || "PAY_LATER".equalsIgnoreCase(o.getPaymentType()))
+                .map(o -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("orderId", o.getOrderId());
+                    row.put("customerName", o.getUser() != null ? o.getUser().getName() : null);
+                    row.put("customerEmail", o.getUser() != null ? o.getUser().getEmail() : null);
+                    row.put("totalPrice", o.getTotalPrice());
+                    row.put("creditDays", o.getCreditDays());
+                    row.put("creditDueDate", o.getCreditDueDate());
+                    row.put("paymentStatus", o.getPaymentStatus() == null ? "PENDING" : o.getPaymentStatus());
+                    row.put("reminderIntervalDays", o.getReminderIntervalDays() == null ? 2 : o.getReminderIntervalDays());
+                    row.put("lastReminderSentAt", o.getLastReminderSentAt());
+                    row.put("creditApprovalStatus", o.getCreditApprovalStatus());
+                    row.put("orderWorkflowStatus", o.getOrderWorkflowStatus());
+                    return row;
+                })
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    /** Manually triggers the pay-later reminder scheduler (admin use / testing). */
+    @PostMapping("/pay-later-reminders/trigger")
+    public ResponseEntity<?> triggerPayLaterReminders() {
+        orderNotificationService.sendPayLaterReminders();
+        return ResponseEntity.ok(Map.of("message", "Pay-later reminders triggered successfully."));
+    }
+
 
     // ? 1. Get All Orders
     @GetMapping("/orders")
@@ -1729,6 +1761,9 @@ public class AdminController {
         row.put("creditDueDate", order.getCreditDueDate());
         row.put("creditReviewRemark", order.getCreditReviewRemark());
         row.put("paymentReceivedAt", order.getPaymentReceivedAt());
+        row.put("paymentStatus", order.getPaymentStatus() == null ? "PENDING" : order.getPaymentStatus());
+        row.put("reminderIntervalDays", order.getReminderIntervalDays() == null ? 2 : order.getReminderIntervalDays());
+        row.put("lastReminderSentAt", order.getLastReminderSentAt());
         row.put("createdAt", order.getCreatedAt());
         row.put("deliveryDate", order.getDeliveryDate());
         row.put("scheduledDate", order.getScheduledDate());

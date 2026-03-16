@@ -11,6 +11,7 @@ import PurchaseProduct from "./Pages/customer/PurchaseProduct";
 import DeliveryTracking from "./Pages/customer/DeliveryTracking";
 import BillingPayment from "./Pages/customer/BillingPayment";
 import QualityAccess from "./Pages/customer/QualityAccess";
+import Quotation from "./Pages/customer/Quotation";
 import OrderSuccess from "./Pages/customer/OrderSuccess";
 import CheckoutPayment from "./Pages/customer/CheckoutPayment";
 import OrderApprovalStatus from "./Pages/customer/OrderApprovalStatus";
@@ -27,6 +28,7 @@ import AdminSchedule from "./Pages/admin/AdminSchedule";
 import AdminInventory from "./Pages/admin/AdminInventory";
 import AdminFinance from "./Pages/admin/AdminFinance";
 import AdminQualityControl from "./Pages/admin/AdminQualityControl";
+import AdminQuotation from "./Pages/admin/AdminQuotation";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CustomerLayout from "./components/CustomerLayout";
 import AdminLayout from "./components/AdminLayout";
@@ -82,6 +84,7 @@ function App() {
           <Route path="/billing-payment" element={<BillingPayment />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/quality-access" element={<QualityAccess />} />
+          <Route path="/quotation" element={<Quotation />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/customize-profile" element={<CustomizeProfile />} />
         </Route>
@@ -104,6 +107,7 @@ function App() {
           <Route path="inventory" element={<AdminInventory />} />
           <Route path="finance" element={<AdminFinance />} />
           <Route path="quality-control" element={<AdminQualityControl />} />
+          <Route path="quotation" element={<AdminQuotation />} />
           <Route path="maintenance" element={<AdminMaintenance />} />
         </Route>
 

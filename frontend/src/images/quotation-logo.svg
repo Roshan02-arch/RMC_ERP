@@ -1,0 +1,21 @@
+<svg width="300" height="350" viewBox="0 0 300 350" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="300" height="350" fill="#F4F4F4"/>
+  <g transform="translate(92,18)">
+    <path d="M58 0L95 28V110L58 86L21 110V28L58 0Z" fill="#17A3E6" opacity="0.98"/>
+    <path d="M35 17L58 2L81 17" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M35 34L58 19L81 34" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M35 51L58 36L81 51" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M35 68L58 53L81 68" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M35 85L58 70L81 85" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M0 93L33 65V122L0 146V93Z" fill="#17A3E6"/>
+    <path d="M83 65L116 93V146L83 122V65Z" fill="#17A3E6"/>
+    <path d="M10 101L33 84" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M83 84L106 101" stroke="#F4F4F4" stroke-width="5"/>
+    <path d="M45 112H71V146H45V112Z" fill="#F4F4F4"/>
+    <path d="M24 122H40V138H24V122Z" fill="#F4F4F4"/>
+    <path d="M76 122H92V138H76V122Z" fill="#F4F4F4"/>
+  </g>
+  <text x="150" y="215" text-anchor="middle" font-size="78" font-weight="800" fill="#35209A" font-family="Georgia, 'Times New Roman', serif">RRY</text>
+  <text x="150" y="265" text-anchor="middle" font-size="32" font-weight="700" fill="#2E1B86" font-family="Georgia, 'Times New Roman', serif">INFRA PVT LTD</text>
+  <text x="150" y="308" text-anchor="middle" font-size="11" fill="#4B2B87" font-family="Georgia, 'Times New Roman', serif">Researching in Real Estate for Young Hearts</text>
+</svg>
