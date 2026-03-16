@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import jsPDF from "jspdf";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
 type RawMaterial = {
@@ -64,13 +65,6 @@ const periodLabel = (value: string) => {
   if (value === "weekly") return "Weekly";
   if (value === "monthly") return "Monthly";
   return "Daily";
-};
-const csvCell = (value: string | number) => {
-  const text = String(value ?? "");
-  if (text.includes(",") || text.includes('"') || text.includes("\n")) {
-    return `"${text.replaceAll('"', '""')}"`;
-  }
-  return text;
 };
 
 const AdminInventory = () => {
@@ -504,58 +498,109 @@ const AdminInventory = () => {
         start.setDate(1);
       }
 
-      const headerRows = [
-        `Report Type,Stock Report`,
-        `Period,${periodLabel(period)}`,
-        `From,${start.toLocaleDateString()}`,
-        `To,${now.toLocaleDateString()}`,
-        `Generated At,${now.toLocaleString()}`,
-        ``,
-        `Stock Summary`,
-        `Material,Current Stock,Consumed,Restocked,Movements`,
-      ];
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 14;
+      const lineHeight = 6;
+      const usableWidth = pageWidth - margin * 2;
+      let y = 16;
 
-      const summaryRows = reportRows.map((row) =>
-        [
-          csvCell(row.name),
-          csvCell(`${row.currentStock} ${row.unit}`),
-          csvCell(`${row.totalConsumed} ${row.unit}`),
-          csvCell(`${row.totalRestocked} ${row.unit}`),
-          csvCell(row.movementCount),
-        ].join(",")
-      );
+      const ensureSpace = (requiredHeight = 12) => {
+        if (y + requiredHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = 16;
+        }
+      };
 
-      const movementHeader = [
-        ``,
-        `Stock Movement Details`,
-        `Material,Type,Qty,Reference,Date`,
-      ];
+      pdf.setFillColor(31, 41, 55);
+      pdf.rect(0, 0, pageWidth, 28, "F");
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(16);
+      pdf.text(`RMC ERP ${periodLabel(period)} Stock Report`, margin, 13);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.text(`Generated: ${now.toLocaleString()}`, margin, 20);
 
-      const movementRows =
-        movements.length === 0
-          ? ["No movement records found for selected period"]
-          : movements.map((movement) =>
-              [
-                csvCell(movement.material),
-                csvCell(movement.movementType),
-                csvCell(movement.quantity),
-                csvCell(
-                  `${movement.referenceType || ""}${
-                    movement.referenceId ? ` (${movement.referenceId})` : ""
-                  }`
-                ),
-                csvCell(new Date(movement.createdAt).toLocaleString()),
-              ].join(",")
-            );
+      y = 38;
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      pdf.text("Report Window", margin, y);
+      y += 8;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.text(`Period: ${periodLabel(period)}`, margin, y);
+      pdf.text(`From: ${start.toLocaleDateString()}`, 80, y);
+      pdf.text(`To: ${now.toLocaleDateString()}`, 140, y);
 
-      const csvContent = [...headerRows, ...summaryRows, ...movementHeader, ...movementRows].join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `stock-report-${period}-${now.toISOString().slice(0, 10)}.csv`;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      y += 12;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      pdf.text("Stock Summary", margin, y);
+      y += 8;
+
+      pdf.setFillColor(243, 244, 246);
+      pdf.rect(margin, y - 5, usableWidth, 8, "F");
+      pdf.setFontSize(9);
+      pdf.text("Material", margin + 2, y);
+      pdf.text("Current", margin + 72, y);
+      pdf.text("Consumed", margin + 104, y);
+      pdf.text("Restocked", margin + 136, y);
+      pdf.text("Moves", margin + 172, y);
+      y += 7;
+
+      pdf.setFont("helvetica", "normal");
+      if (reportRows.length === 0) {
+        pdf.text("No stock summary available for the selected period.", margin, y);
+        y += 8;
+      } else {
+        for (const row of reportRows) {
+          ensureSpace(8);
+          pdf.text(row.name.slice(0, 28), margin + 2, y);
+          pdf.text(`${row.currentStock} ${row.unit}`.slice(0, 16), margin + 72, y);
+          pdf.text(`${row.totalConsumed} ${row.unit}`.slice(0, 16), margin + 104, y);
+          pdf.text(`${row.totalRestocked} ${row.unit}`.slice(0, 16), margin + 136, y);
+          pdf.text(String(row.movementCount), margin + 172, y);
+          y += 7;
+        }
+      }
+
+      y += 6;
+      ensureSpace(18);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      pdf.text("Stock Movement Details", margin, y);
+      y += 8;
+
+      if (movements.length === 0) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10);
+        pdf.text("No movement records found for the selected period.", margin, y);
+      } else {
+        for (const movement of movements) {
+          const lines = pdf.splitTextToSize(
+            `Material: ${movement.material}
+Type: ${movement.movementType}   Qty: ${movement.quantity}
+Reference: ${movement.referenceType || "-"}${
+              movement.referenceId ? ` (${movement.referenceId})` : ""
+            }
+Date: ${new Date(movement.createdAt).toLocaleString()}`,
+            usableWidth - 6
+          );
+
+          ensureSpace(lines.length * lineHeight + 8);
+          pdf.setDrawColor(226, 232, 240);
+          pdf.roundedRect(margin, y - 4, usableWidth, lines.length * lineHeight + 4, 2, 2);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9);
+          pdf.text(lines, margin + 3, y);
+          y += lines.length * lineHeight + 6;
+        }
+      }
+
+      pdf.save(`stock-report-${period}-${now.toISOString().slice(0, 10)}.pdf`);
     } finally {
       setDownloadingReport(false);
     }
