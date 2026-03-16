@@ -205,9 +205,16 @@ const Navbar = () => {
           <NavLink to="/home" className={navItemClass}>
             Home
           </NavLink>
+          <NavLink to="/about-us" className={navItemClass}>
+                      About Us
+                    </NavLink>
+
           <NavLink to="/purchaseproduct" className={navItemClass}>
             Purchase Product
           </NavLink>
+          <NavLink to="/contact-us" className={navItemClass}>
+                      Contact Us
+                    </NavLink>
           {displayName && <span className="text-indigo-600">Welcome, {displayName}</span>}
 
           <div className="relative">
