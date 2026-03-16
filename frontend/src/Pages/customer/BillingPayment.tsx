@@ -58,8 +58,28 @@ const RATE_MAP: Record<string, number> = {
 };
 
 const GST_RATE = 18;
+const COMPANY_NAME = "RMC ERP Pvt. Ltd.";
+const COMPANY_EMAIL = "billing@rmcerp.com";
+const COMPANY_PHONE = "+91 98765 43210";
+const COMPANY_ADDRESS = "Industrial Area, Hyderabad, Telangana";
 const formatCurrency = (value: number) =>
   `Rs.${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const formatDateLabel = (value?: string) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+const formatStatusLabel = (value?: string) => (value ? value.replaceAll("_", " ") : "-");
+const getStatusPillClass = (status: PaymentStatus) => {
+  if (status === "PAYMENT_COMPLETED") return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (status === "PARTIALLY_PAID") return "bg-amber-100 text-amber-700 border-amber-200";
+  return "bg-rose-100 text-rose-700 border-rose-200";
+};
 const isCodPayment = (method: string) => method.trim().toUpperCase().startsWith("CASH_ON_DELIVERY");
 const normalizeStatus = (value: string) => value.trim().toUpperCase();
 const isRawPaymentCompleted = (status: string) => {
@@ -312,6 +332,25 @@ const BillingPayment = () => {
     : selectedRawOrder && isRawPaymentCompleted(selectedRawOrder.status)
     ? "PAYMENT_COMPLETED"
     : "PENDING";
+  const invoiceRef = selectedOrder ? selectedOrder.orderId : selectedRawOrder ? `RMO-${selectedRawOrder.id}` : "-";
+  const invoiceNumber = `INV-${invoiceRef}`;
+  const invoiceIssueDate = formatDateLabel(new Date().toISOString());
+  const invoiceDeliveryDate = formatDateLabel(selectedOrder?.deliveryDate || selectedRawOrder?.createdAt);
+  const invoiceItemDescription = selectedOrder
+    ? `Concrete ${selectedOrder.grade}`
+    : selectedRawOrder
+    ? `Raw Material ${selectedRawOrder.materialName}`
+    : "-";
+  const invoiceItemQuantity = selectedOrder
+    ? `${selectedOrder.quantity} m3`
+    : selectedRawOrder
+    ? `${selectedRawOrder.quantity} ${selectedRawOrder.unit}`
+    : "-";
+  const invoiceRate = selectedOrder ? ratePerCubicMeter : Number(selectedRawOrder?.pricePerUnit || 0);
+  const paymentDueDate =
+    selectedOrder && String(selectedOrder.paymentOption || "").toUpperCase() === "PAY_LATER"
+      ? formatDateLabel(selectedOrder.creditDueDate)
+      : "Immediate";
 
   const downloadInvoicePdf = ({
     concreteOrder,
@@ -353,59 +392,137 @@ const BillingPayment = () => {
     try {
       setDownloadingPdf(true);
       const pdf = new jsPDF("p", "mm", "a4");
-      let y = 20;
+      const invoiceRef = targetOrder ? targetOrder.orderId : `RMO-${targetRawOrder!.id}`;
+      const issueDate = formatDateLabel(new Date().toISOString());
+      const deliveryDate = targetOrder?.deliveryDate || targetRawOrder?.createdAt;
+      const invoiceId = `INV-${invoiceRef}`;
+      const itemDescription = targetOrder
+        ? `Concrete ${targetOrder.grade}`
+        : `Raw Material ${targetRawOrder!.materialName}`;
+      const itemQuantity = targetOrder
+        ? `${targetOrder.quantity} m3`
+        : `${targetRawOrder!.quantity} ${targetRawOrder!.unit}`;
+      const targetDueDate =
+        targetOrder && String(targetOrder.paymentOption || "").toUpperCase() === "PAY_LATER"
+          ? formatDateLabel(targetOrder.creditDueDate)
+          : "Immediate";
+      const targetProject = targetOrder
+        ? `Concrete ${targetOrder.grade}`
+        : `Raw ${targetRawOrder!.materialName}`;
+      const marginX = 14;
+      const pageWidth = 210;
+      const contentWidth = 182;
 
+      let y = 12;
+      pdf.setTextColor(148, 163, 184);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.text("EST. 2013", pageWidth / 2, y, { align: "center" });
+      y += 6;
+      pdf.setTextColor(100, 116, 139);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(18);
-      pdf.text("RMC ERP - TAX INVOICE", 14, y);
-      y += 10;
+      pdf.text("RMC ERP", pageWidth / 2, y, { align: "center" });
+      y += 4;
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(marginX, y, marginX + contentWidth, y);
 
+      y += 8;
+      pdf.setTextColor(37, 99, 145);
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(11);
-      const invoiceRef = targetOrder ? targetOrder.orderId : `RMO-${targetRawOrder!.id}`;
-      pdf.text(`Invoice No: INV-${invoiceRef}`, 14, y);
-      pdf.text(`Date: ${new Date().toLocaleDateString()}`, 140, y);
-      y += 8;
-      pdf.text(`Order ID: ${invoiceRef}`, 14, y);
-      y += 8;
-      pdf.text(`Customer: ${customerName}`, 14, y);
-      y += 6;
-      pdf.text(`Email: ${customerEmail}`, 14, y);
-      y += 6;
-      pdf.text(`Phone: ${customerPhone}`, 14, y);
-      y += 10;
+      pdf.setFontSize(17);
+      pdf.text("INVOICE", marginX, y);
 
-      pdf.setDrawColor(220, 220, 220);
-      pdf.rect(14, y, 182, 10);
-      pdf.text("Description", 16, y + 7);
-      pdf.text("Qty", 110, y + 7);
-      pdf.text("Rate", 135, y + 7);
-      pdf.text("Amount", 165, y + 7);
-      y += 10;
+      pdf.setFontSize(8);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text("Prepared For", 100, y - 2);
+      pdf.text(customerName, 100, y + 2);
+      pdf.text(customerEmail, 100, y + 6);
+      pdf.text(customerPhone, 100, y + 10);
+      pdf.text("Prepared By", 150, y - 2);
+      pdf.text(COMPANY_NAME, 150, y + 2);
+      pdf.text(COMPANY_EMAIL, 150, y + 6);
+      pdf.text(COMPANY_PHONE, 150, y + 10);
 
-      pdf.rect(14, y, 182, 12);
-      if (targetOrder) {
-        pdf.text(`Concrete ${targetOrder.grade}`, 16, y + 8);
-        pdf.text(`${targetOrder.quantity} m3`, 110, y + 8);
-        pdf.text(formatCurrency(targetRatePerUnit), 135, y + 8);
-        pdf.text(formatCurrency(targetSubtotal), 165, y + 8);
-      } else {
-        pdf.text(`Raw Material ${targetRawOrder!.materialName}`, 16, y + 8);
-        pdf.text(`${targetRawOrder!.quantity} ${targetRawOrder!.unit}`, 110, y + 8);
-        pdf.text(formatCurrency(targetRatePerUnit), 135, y + 8);
-        pdf.text(formatCurrency(targetSubtotal), 165, y + 8);
-      }
       y += 18;
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(marginX, y, marginX + contentWidth, y);
 
-      pdf.text(`Subtotal: ${formatCurrency(targetSubtotal)}`, 132, y);
-      y += 7;
-      pdf.text(`GST (${GST_RATE}%): ${formatCurrency(targetGstAmount)}`, 132, y);
-      y += 7;
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(12);
-      pdf.text(`Total: ${formatCurrency(targetTotalPayable)}`, 132, y);
+      y += 6;
+      pdf.setTextColor(100, 116, 139);
+      pdf.setFontSize(7.5);
+      pdf.text("Invoice #", marginX, y);
+      pdf.text("Date", 62, y);
+      pdf.text("Payment Due", 97, y);
+      pdf.text("Project", 138, y);
+
+      y += 5;
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(9);
+      pdf.text(invoiceId, marginX, y);
+      pdf.text(issueDate, 62, y);
+      pdf.text(targetDueDate, 97, y);
+      pdf.text(targetProject, 138, y);
+
+      y += 6;
+      pdf.line(marginX, y, marginX + contentWidth, y);
+
       y += 8;
-      pdf.text(`Payment Status: ${targetPaymentStatus.replaceAll("_", " ")}`, 132, y);
+      pdf.setTextColor(100, 116, 139);
+      pdf.setFontSize(8);
+      pdf.text("Description", marginX, y);
+      pdf.text("Quantity", 112, y);
+      pdf.text("Rate", 142, y);
+      pdf.text("Subtotal", 170, y);
+
+      y += 4;
+      pdf.line(marginX, y, marginX + contentWidth, y);
+
+      y += 7;
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFontSize(9);
+      pdf.text(`${itemDescription} - Delivery ${formatDateLabel(deliveryDate)}`, marginX, y);
+      pdf.text(itemQuantity, 112, y);
+      pdf.text(formatCurrency(targetRatePerUnit), 142, y);
+      pdf.text(formatCurrency(targetSubtotal), 170, y);
+
+      y += 4;
+      pdf.line(marginX, y, marginX + contentWidth, y);
+
+      y += 10;
+      pdf.setTextColor(71, 85, 105);
+      pdf.setFontSize(8);
+      pdf.text("TERMS & CONDITIONS", marginX, y);
+      pdf.text("TOTAL", 160, y);
+
+      y += 5;
+      pdf.setFontSize(7);
+      pdf.text("Please verify quantity and delivery details before receipt.", marginX, y);
+      pdf.text(formatCurrency(targetTotalPayable), 170, y);
+      y += 4;
+      pdf.text("Late payment terms apply for approved pay-later orders.", marginX, y);
+      pdf.text(`Tax ${GST_RATE}%`, 160, y);
+      y += 4;
+      pdf.text("This invoice is generated digitally and valid without signature.", marginX, y);
+
+      y += 11;
+      pdf.setTextColor(37, 99, 145);
+      pdf.setFontSize(7);
+      pdf.text("AMOUNT DUE", 130, y);
+      y += 10;
+      pdf.setFontSize(23);
+      pdf.text(formatCurrency(targetTotalPayable), 130, y);
+
+      y += 14;
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(marginX, y, marginX + contentWidth, y);
+      y += 7;
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text(`${COMPANY_EMAIL} • ${COMPANY_PHONE}`, marginX, y);
+      pdf.setFontSize(12);
+      pdf.setTextColor(37, 99, 145);
+      pdf.text("THANK YOU!", 170, y, { align: "right" });
 
       pdf.save(`Invoice_${invoiceRef}.pdf`);
     } finally {
@@ -425,8 +542,8 @@ const BillingPayment = () => {
       <main className="max-w-7xl mx-auto px-6 pt-28 pb-10 space-y-6">
         <section className="rounded-3xl overflow-hidden shadow-xl border border-slate-700">
           <div className="bg-[linear-gradient(110deg,#111827_0%,#1f2937_50%,#374151_100%)] text-white p-8">
-            <h1 className="text-3xl mt-2 font-semibold [font-family:'Georgia',serif]">Billing and Invoice</h1>
-            <p className="text-slate-200 mt-2 text-sm">Invoice view for your selected order.</p>
+            <h1 className="text-3xl mt-2 font-semibold">Billing and Invoice</h1>
+            <p className="text-slate-200 mt-2 text-sm">Professional invoice summary with one-click PDF download.</p>
           </div>
         </section>
 
@@ -488,40 +605,135 @@ const BillingPayment = () => {
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                 <h2 className="font-semibold text-slate-800">Invoice Preview</h2>
                 <button onClick={handleDownloadPdf} disabled={downloadingPdf} className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-medium">
-                  {downloadingPdf ? "Preparing PDF..." : "Download Invoice PDF"}
+                  {downloadingPdf ? "Preparing PDF..." : "Download Invoice"}
                 </button>
               </div>
               <div className="p-7">
-                {selectedOrder ? (
-                  <>
-                    <p className="text-sm"><strong>Invoice:</strong> INV-{selectedOrder.orderId}</p>
-                    <p className="text-sm"><strong>Order:</strong> {selectedOrder.orderId}</p>
-                    <p className="text-sm"><strong>Grade:</strong> {selectedOrder.grade}</p>
-                    <p className="text-sm"><strong>Quantity:</strong> {selectedOrder.quantity} m3</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm"><strong>Invoice:</strong> INV-RMO-{selectedRawOrder!.id}</p>
-                    <p className="text-sm"><strong>Order:</strong> RMO-{selectedRawOrder!.id}</p>
-                    <p className="text-sm"><strong>Material:</strong> {selectedRawOrder!.materialName}</p>
-                    <p className="text-sm"><strong>Quantity:</strong> {selectedRawOrder!.quantity} {selectedRawOrder!.unit}</p>
-                    <p className="text-sm"><strong>Rate:</strong> Rs.{selectedRawOrder!.pricePerUnit} / {selectedRawOrder!.unit}</p>
-                    <p className="text-sm"><strong>Subtotal:</strong> {formatCurrency(subtotal)}</p>
-                    <p className="text-sm"><strong>Order Status:</strong> {selectedRawOrder!.status.replaceAll("_", " ")}</p>
-                  </>
-                )}
-                <p className="text-sm"><strong>Customer:</strong> {customerName}</p>
-                <p className="text-sm"><strong>Email:</strong> {customerEmail}</p>
-                <p className="text-sm"><strong>Phone:</strong> {customerPhone}</p>
-                <p className="text-sm"><strong>Address:</strong> {selectedRawOrder?.address || customerAddress}</p>
-                <p className="text-sm mt-2"><strong>Payment Status:</strong> {paymentStatus.replaceAll("_", " ")}</p>
+                <div className="max-w-4xl mx-auto border border-slate-200 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
+                  <div className="px-8 pt-7 pb-3 text-center">
+                    <p className="text-[11px] uppercase tracking-[0.26em] text-slate-400">EST. 2013</p>
+                    <h3 className="mt-1 text-3xl font-semibold text-slate-500">RMC ERP</h3>
+                    <div className="mt-4 border-t border-slate-200" />
+                  </div>
+
+                  <div className="px-8 pb-2 grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 items-start">
+                    <h2 className="text-4xl font-light text-sky-700 tracking-tight">INVOICE</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-[11px] text-slate-600">
+                      <div>
+                        <p className="font-semibold uppercase tracking-[0.12em] text-slate-500">Prepared For</p>
+                        <p className="mt-1 text-slate-700">{customerName}</p>
+                        <p>{customerEmail}</p>
+                        <p>{customerPhone}</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold uppercase tracking-[0.12em] text-slate-500">Prepared By</p>
+                        <p className="mt-1 text-slate-700">{COMPANY_NAME}</p>
+                        <p>{COMPANY_ADDRESS}</p>
+                        <p>{COMPANY_EMAIL}</p>
+                        <p>{COMPANY_PHONE}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-8 pb-5">
+                    <div className="border-y border-slate-200 py-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                      <div>
+                        <p className="uppercase tracking-[0.12em] text-slate-400">Invoice #</p>
+                        <p className="mt-1 text-slate-700 font-medium">{invoiceNumber}</p>
+                      </div>
+                      <div>
+                        <p className="uppercase tracking-[0.12em] text-slate-400">Date</p>
+                        <p className="mt-1 text-slate-700 font-medium">{invoiceIssueDate}</p>
+                      </div>
+                      <div>
+                        <p className="uppercase tracking-[0.12em] text-slate-400">Payment Due</p>
+                        <p className="mt-1 text-slate-700 font-medium">{paymentDueDate}</p>
+                      </div>
+                      <div>
+                        <p className="uppercase tracking-[0.12em] text-slate-400">Project</p>
+                        <p className="mt-1 text-slate-700 font-medium">{invoiceItemDescription}</p>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto mt-3">
+                      <table className="w-full text-sm">
+                        <thead className="text-slate-500 uppercase text-[11px] tracking-[0.12em] border-b border-slate-200">
+                          <tr>
+                            <th className="text-left py-3">Description</th>
+                            <th className="text-right py-3">Hours/Amount</th>
+                            <th className="text-right py-3">Price/Rate</th>
+                            <th className="text-right py-3">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-slate-100">
+                            <td className="py-3 text-slate-700">
+                              <p className="font-medium">{invoiceItemDescription}</p>
+                              <p className="text-xs text-slate-500">Delivery: {invoiceDeliveryDate}</p>
+                              <p className="text-xs text-slate-500">Status: {formatStatusLabel(paymentStatus)}</p>
+                            </td>
+                            <td className="py-3 text-right text-slate-700">{invoiceItemQuantity}</td>
+                            <td className="py-3 text-right text-slate-700">{formatCurrency(invoiceRate)}</td>
+                            <td className="py-3 text-right text-slate-800 font-semibold">{formatCurrency(subtotal)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div>
+                        <p className="text-xs font-semibold tracking-[0.12em] text-slate-500 uppercase">Terms & Conditions</p>
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          Please verify quantity and delivery details before accepting the order.
+                          For approved credit orders, late payment terms may apply based on policy.
+                        </p>
+                        <p className="mt-3 text-xs text-slate-500">Billing Contact: {COMPANY_EMAIL}</p>
+                      </div>
+
+                      <div className="md:pl-8">
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between text-slate-700">
+                            <span>Total</span>
+                            <span>{formatCurrency(subtotal)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-700">
+                            <span>Taxes</span>
+                            <span>{GST_RATE}%</span>
+                          </div>
+                          <div className="flex justify-between text-slate-700">
+                            <span>Payment Status</span>
+                            <span>{formatStatusLabel(paymentStatus)}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 border-t border-slate-200 pt-3">
+                          <p className="text-xs uppercase tracking-[0.14em] text-sky-700">Amount Due</p>
+                          <p className="mt-2 text-5xl font-light text-sky-700 leading-none">{formatCurrency(totalPayable)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 border-t border-slate-200 pt-3 flex items-center justify-between text-xs">
+                      <p className="text-slate-500">This is a system-generated invoice and valid without signature.</p>
+                      <p className="text-sky-700 text-3xl font-light tracking-wide">THANK YOU!</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex items-center justify-between gap-3 text-sm">
+                  <span className="text-slate-600">Download this invoice in the same professional format as PDF.</span>
+                  <button onClick={handleDownloadPdf} disabled={downloadingPdf} className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-medium">
+                    {downloadingPdf ? "Preparing PDF..." : "Download Invoice"}
+                  </button>
+                </div>
+
                 {selectedOrder && String(selectedOrder.paymentOption || "").toUpperCase() === "PAY_LATER" && (
-                  <>
-                    <p className="text-sm"><strong>Payment Option:</strong> Pay Later</p>
-                    <p className="text-sm"><strong>Credit Status:</strong> {(selectedOrder.creditApprovalStatus || "PENDING").replaceAll("_", " ")}</p>
-                    <p className="text-sm"><strong>Credit Due Date:</strong> {selectedOrder.creditDueDate || "-"}</p>
-                    <p className="text-sm"><strong>Admin Remark:</strong> {selectedOrder.creditReviewRemark || "-"}</p>
-                  </>
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    <p><strong>Payment Option:</strong> Pay Later</p>
+                    <p><strong>Credit Status:</strong> {formatStatusLabel(selectedOrder.creditApprovalStatus || "PENDING")}</p>
+                    <p><strong>Credit Due Date:</strong> {formatDateLabel(selectedOrder.creditDueDate)}</p>
+                    <p><strong>Admin Remark:</strong> {selectedOrder.creditReviewRemark || "-"}</p>
+                  </div>
                 )}
                 {selectedOrder && String(selectedOrder.creditApprovalStatus || "").toUpperCase() === "REJECTED" && (
                   <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -566,7 +778,7 @@ const BillingPayment = () => {
                       disabled={downloadingPdf}
                       className="mt-3 px-3 py-2 rounded-lg bg-slate-700 text-white text-xs font-medium disabled:opacity-60"
                     >
-                      {downloadingPdf ? "Preparing PDF..." : "Download Invoice PDF"}
+                        {downloadingPdf ? "Preparing PDF..." : "Download Invoice"}
                     </button>
                   </div>
                 );
@@ -589,7 +801,7 @@ const BillingPayment = () => {
                     disabled={downloadingPdf}
                     className="mt-3 px-3 py-2 rounded-lg bg-slate-700 text-white text-xs font-medium disabled:opacity-60"
                   >
-                    {downloadingPdf ? "Preparing PDF..." : "Download Invoice PDF"}
+                      {downloadingPdf ? "Preparing PDF..." : "Download Invoice"}
                   </button>
                 </div>
               ))}

@@ -28,6 +28,7 @@ type NotificationContextValue = {
   refreshNotifications: () => Promise<void>;
   markAsRead: (notificationId: number) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  deleteNotification: (notificationId: number) => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -231,6 +232,39 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     setUnreadCount(0);
   }, [isCustomerSession, userId]);
 
+  const deleteNotification = useCallback(async (notificationId: number) => {
+    if (!isCustomerSession) {
+      return;
+    }
+
+    const current = notifications.find((notification) => notification.id === notificationId);
+
+    let res = await fetch(
+      `http://localhost:8080/api/notifications/${notificationId}?userId=${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    if (res.status === 404) {
+      res = await fetch(
+        `http://localhost:8080/api/notifications/${notificationId}/delete?userId=${encodeURIComponent(userId)}`,
+        {
+          method: "PUT",
+        }
+      );
+    }
+
+    if (!res.ok) {
+      throw new Error("Failed to delete notification");
+    }
+
+    setNotifications((prev) => prev.filter((notification) => notification.id !== notificationId));
+    if (current && !current.isRead) {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
+  }, [isCustomerSession, notifications, userId]);
+
   const contextValue = useMemo<NotificationContextValue>(
     () => ({
       notifications,
@@ -241,8 +275,9 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       refreshNotifications: fetchNotifications,
       markAsRead,
       markAllAsRead,
+      deleteNotification,
     }),
-    [fetchNotifications, isPanelOpen, loading, markAllAsRead, markAsRead, notifications, unreadCount]
+    [deleteNotification, fetchNotifications, isPanelOpen, loading, markAllAsRead, markAsRead, notifications, unreadCount]
   );
 
   return (

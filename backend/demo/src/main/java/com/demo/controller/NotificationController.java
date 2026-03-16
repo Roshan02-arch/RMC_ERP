@@ -7,6 +7,7 @@ import com.demo.service.OrderNotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -86,6 +87,32 @@ public class NotificationController {
                 "message", "Notifications marked as read",
                 "updatedCount", updatedCount
         ));
+    }
+
+    @DeleteMapping("/{notificationId}")
+    public ResponseEntity<?> deleteNotification(
+            @PathVariable Long notificationId,
+            @RequestParam Long userId
+    ) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(404).body(Map.of("message", "User not found"));
+        }
+
+        boolean deleted = orderNotificationService.deleteNotification(userId, notificationId);
+        if (!deleted) {
+            return ResponseEntity.status(404).body(Map.of("message", "Notification not found"));
+        }
+
+        return ResponseEntity.ok(Map.of("message", "Notification deleted"));
+    }
+
+    @PutMapping("/{notificationId}/delete")
+    public ResponseEntity<?> deleteNotificationCompat(
+            @PathVariable Long notificationId,
+            @RequestParam Long userId
+    ) {
+        return deleteNotification(notificationId, userId);
     }
 
     private Map<String, Object> toView(OrderNotification n) {

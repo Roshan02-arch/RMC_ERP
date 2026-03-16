@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { normalizeRole } from "../../utils/auth";
 import { useNotifications } from "../../context/NotificationContext";
 import type { AppNotification } from "../../types/notification";
@@ -28,6 +29,7 @@ const formatTimestamp = (value?: string) => {
 const Notifications = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const {
     notifications,
@@ -36,6 +38,7 @@ const Notifications = () => {
     markAsRead,
     markAllAsRead,
     refreshNotifications,
+    deleteNotification,
   } = useNotifications();
 
   useEffect(() => {
@@ -125,37 +128,63 @@ const Notifications = () => {
           ) : (
             <div className="space-y-3">
               {filteredRows.map((row) => (
-                <button
+                <div
                   key={row.id}
-                  type="button"
-                  onClick={() => void onRowClick(row)}
                   className={`w-full text-left border rounded-xl p-4 transition ${
                     row.isRead
                       ? "border-gray-200 bg-white hover:bg-gray-50"
                       : "border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50"
                   }`}
                 >
-                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-gray-800">{row.title || "Notification"}</p>
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${typeClass(row.type)}`}>
-                          {row.type.replaceAll("_", " ")}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                            row.isRead ? "bg-gray-100 text-gray-600" : "bg-indigo-100 text-indigo-700"
-                          }`}
-                        >
-                          {row.isRead ? "READ" : "UNREAD"}
-                        </span>
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void onRowClick(row)}
+                      className="flex-1 text-left"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-gray-800">{row.title || "Notification"}</p>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${typeClass(row.type)}`}>
+                            {row.type.replaceAll("_", " ")}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                              row.isRead ? "bg-gray-100 text-gray-600" : "bg-indigo-100 text-indigo-700"
+                            }`}
+                          >
+                            {row.isRead ? "READ" : "UNREAD"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700">{row.message}</p>
+                        {row.orderId && <p className="text-xs text-gray-500 font-medium">{row.orderId}</p>}
                       </div>
-                      <p className="text-sm text-gray-700">{row.message}</p>
-                      {row.orderId && <p className="text-xs text-gray-500 font-medium">{row.orderId}</p>}
+                    </button>
+
+                    <div className="flex items-center gap-3 md:flex-col md:items-end md:min-w-[130px]">
+                      <p className="text-xs text-gray-500">{formatTimestamp(row.createdAt)}</p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            setDeletingId(row.id);
+                            await deleteNotification(row.id);
+                            toast.success("Notification deleted.");
+                          } catch (error) {
+                            console.error("Failed to delete notification", error);
+                            toast.error("Failed to delete notification.");
+                          } finally {
+                            setDeletingId((current) => (current === row.id ? null : current));
+                          }
+                        }}
+                        disabled={deletingId === row.id}
+                        className="px-3 py-1.5 rounded-md border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 disabled:opacity-60"
+                      >
+                        {deletingId === row.id ? "Deleting..." : "Delete"}
+                      </button>
                     </div>
-                    <p className="text-xs text-gray-500">{formatTimestamp(row.createdAt)}</p>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}

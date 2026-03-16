@@ -217,6 +217,20 @@ public class OrderNotificationService {
         return unread.size();
     }
 
+    @Transactional
+    public boolean deleteNotification(Long userId, Long notificationId) {
+        OrderNotification notification = orderNotificationRepository
+                .findByIdAndUserId(notificationId, userId)
+                .orElse(null);
+
+        if (notification == null) {
+            return false;
+        }
+
+        orderNotificationRepository.delete(notification);
+        return true;
+    }
+
     private NotificationType resolveType(Order order, DeliveryTrackingStatus trackingStatus, String message) {
         String normalizedMessage = normalize(message);
 
