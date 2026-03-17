@@ -1084,10 +1084,10 @@ function Register() {
             Home
           </NavLink>
           <NavLink to="/about-us" className={navItemClass}>
-                                AboutUs
+                                About Us
                               </NavLink>
                               <NavLink to="/contact-us" className={navItemClass}>
-                                          ContactUs
+                                          Contact Us
                                         </NavLink>
           <NavLink to="/login" className={navItemClass}>
             Login
