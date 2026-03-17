@@ -57,11 +57,24 @@ type StatusOrder = {
   createdAt?: string;
 };
 
+type OrderListItem = {
+  orderId: string;
+  grade: string;
+  quantity: number;
+  totalPrice: number;
+  paymentOption?: string;
+  paymentType?: string;
+  status: string;
+  createdAt?: string;
+};
+
 const badgeClassByStatus: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-100 text-amber-700 border-amber-200",
   APPROVED: "bg-emerald-100 text-emerald-700 border-emerald-200",
   REJECTED: "bg-rose-100 text-rose-700 border-rose-200",
 };
+
+const GST_RATE = 18;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -76,6 +89,12 @@ const formatDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
+const calculateTotalAmount = (value: number) => {
+  const subtotal = Number(value || 0);
+  const tax = (subtotal * GST_RATE) / 100;
+  return subtotal + tax;
+};
+
 const labelFromStatus = (status: string) =>
   String(status || "").trim().toUpperCase().replaceAll("_", " ");
 
@@ -84,13 +103,15 @@ const OrderApprovalStatus = () => {
   const location = useLocation();
   const { orderId: routeOrderId } = useParams();
 
+  const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState("");
   const [order, setOrder] = useState<StatusOrder | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const orderId = useMemo(() => {
+  const preferredOrderId = useMemo(() => {
     if (routeOrderId) return routeOrderId;
 
     const fromState = (location.state as { orderId?: string } | null)?.orderId || "";
@@ -117,37 +138,50 @@ const OrderApprovalStatus = () => {
         return { response, data };
       };
 
-      // If no orderId available, try to look up the user's latest pending/approved order
-      let resolvedOrderId = orderId;
-      if (!resolvedOrderId) {
-        const storedUserId = localStorage.getItem("userId");
-        if (storedUserId) {
-          try {
-            const { response, data } = await fetchAndParse(
-              `${API_BASE_URL}/api/orders/my-orders/${encodeURIComponent(storedUserId)}`
-            );
-            if (response.ok && Array.isArray(data)) {
-              const relevant = (data as Record<string, unknown>[])
-                .filter((o) => {
-                  const payOpt = String(o.paymentOption || o.paymentType || "").toUpperCase();
-                  const st = String(o.status || "").toUpperCase();
-                  return (
-                    (payOpt === "ONLINE" || payOpt === "CASH_ON_DELIVERY") &&
-                    (st === "PENDING_APPROVAL" || st === "APPROVED")
-                  );
-                })
-                .sort((a, b) => {
-                  const ta = new Date(String(a.createdAt || 0)).getTime();
-                  const tb = new Date(String(b.createdAt || 0)).getTime();
-                  return tb - ta;
-                });
-              if (relevant.length > 0) {
-                resolvedOrderId = String(relevant[0].orderId || "");
-              }
+      const storedUserId = localStorage.getItem("userId");
+      let resolvedOrderId = preferredOrderId;
+
+      if (storedUserId) {
+        try {
+          const { response, data } = await fetchAndParse(
+            `${API_BASE_URL}/api/orders/my-orders/${encodeURIComponent(storedUserId)}`
+          );
+
+          if (response.ok && Array.isArray(data)) {
+            const relevant = (data as Record<string, unknown>[])
+              .filter((o) => {
+                const payOpt = String(o.paymentOption || o.paymentType || "").toUpperCase();
+                const st = String(o.status || "").toUpperCase();
+                return (
+                  (payOpt === "ONLINE" || payOpt === "CASH_ON_DELIVERY") &&
+                  (st === "PENDING_APPROVAL" || st === "APPROVED" || st === "REJECTED")
+                );
+              })
+              .sort((a, b) => {
+                const ta = new Date(String(a.createdAt || 0)).getTime();
+                const tb = new Date(String(b.createdAt || 0)).getTime();
+                return tb - ta;
+              })
+              .map((o) => ({
+                orderId: String(o.orderId || ""),
+                grade: String(o.grade || "-"),
+                quantity: Number(o.quantity || 0),
+                totalPrice: Number(o.totalPrice || 0),
+                paymentOption: String(o.paymentOption || ""),
+                paymentType: String(o.paymentType || ""),
+                status: String(o.status || ""),
+                createdAt: String(o.createdAt || ""),
+              }))
+              .filter((o) => o.orderId);
+
+            setOrders(relevant);
+
+            if (!resolvedOrderId && relevant.length > 0) {
+              resolvedOrderId = relevant[0].orderId;
             }
-          } catch {
-            // fall through to error below
           }
+        } catch {
+          setOrders([]);
         }
       }
 
@@ -157,6 +191,8 @@ const OrderApprovalStatus = () => {
         return;
       }
 
+      setSelectedOrderId(resolvedOrderId);
+      localStorage.setItem("latest_order_approval_id", resolvedOrderId);
       try {
         setLoading(true);
 
@@ -209,11 +245,20 @@ const OrderApprovalStatus = () => {
     };
 
     void run();
-  }, [orderId]);
+  }, [preferredOrderId]);
+
+  useEffect(() => {
+    if (!selectedOrderId || selectedOrderId === preferredOrderId) {
+      return;
+    }
+
+    navigate(`/order-approval-status/${encodeURIComponent(selectedOrderId)}`, { replace: true });
+  }, [navigate, preferredOrderId, selectedOrderId]);
 
   const currentStatus = String(order?.status || "").trim().toUpperCase();
   const paymentMethod = String(order?.paymentMethod || "").trim().toUpperCase();
   const paymentStatus = String(order?.paymentStatus || "").trim().toUpperCase();
+  const totalAmount = calculateTotalAmount(Number(order?.totalPrice || 0));
   const isOnlinePayment = paymentMethod === "ONLINE";
   const isCodPayment = paymentMethod === "CASH_ON_DELIVERY";
   const shouldShowPayOnline = currentStatus === "APPROVED" && isOnlinePayment && paymentStatus !== "PAID";
@@ -267,12 +312,31 @@ const OrderApprovalStatus = () => {
             </div>
           ) : order ? (
             <>
+              {orders.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <label className="block">
+                    <span className="text-sm font-semibold text-slate-900">Select Order</span>
+                    <select
+                      value={selectedOrderId}
+                      onChange={(event) => setSelectedOrderId(event.target.value)}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:bg-white"
+                    >
+                      {orders.map((item) => (
+                        <option key={item.orderId} value={item.orderId}>
+                          {item.orderId} - {item.grade} - {formatDate(item.createdAt)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+
               <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <div className="grid grid-cols-1 gap-4 text-sm text-slate-700 sm:grid-cols-2">
                   <p><span className="font-semibold text-slate-900">Order ID:</span> {order.orderId}</p>
                   <p><span className="font-semibold text-slate-900">Product Grade:</span> {order.grade}</p>
                   <p><span className="font-semibold text-slate-900">Quantity:</span> {order.quantity}</p>
-                  <p><span className="font-semibold text-slate-900">Total Price:</span> {formatCurrency(order.totalPrice)}</p>
+                  <p><span className="font-semibold text-slate-900">Total Amount:</span> {formatCurrency(totalAmount)}</p>
                   <p><span className="font-semibold text-slate-900">Payment Method:</span> {(order.paymentMethod || "-").replaceAll("_", " ")}</p>
                   <p><span className="font-semibold text-slate-900">Order Date:</span> {formatDate(order.createdAt)}</p>
                 </div>

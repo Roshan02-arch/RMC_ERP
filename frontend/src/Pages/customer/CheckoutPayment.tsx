@@ -52,6 +52,7 @@ type ExistingOrderPaymentState = {
 };
 
 type PaymentMethod = "ONLINE" | "CASH_ON_DELIVERY" | "PAY_LATER";
+type SelectedPaymentMethod = PaymentMethod | "";
 
 type DeliveryAddressCardProps = {
   customerName: string;
@@ -76,8 +77,8 @@ type OrderDetailsCardProps = {
 };
 
 type PaymentMethodCardProps = {
-  method: PaymentMethod;
-  setMethod: (value: PaymentMethod) => void;
+  method: SelectedPaymentMethod;
+  setMethod: (value: SelectedPaymentMethod) => void;
   creditDays: 15 | 30;
   setCreditDays: (value: 15 | 30) => void;
   allowPayLater: boolean;
@@ -97,6 +98,7 @@ type OrderSummaryCardProps = {
 
 const CART_KEY = "checkout_cart";
 const RAZORPAY_KEY = (import.meta.env.VITE_RAZORPAY_KEY as string | undefined) || "rzp_test_SP8t85FWw5iSOH";
+const GST_RATE = 18;
 
 const cardShell = "rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]";
 const inputClass = "w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:bg-white";
@@ -165,6 +167,12 @@ const formatCurrency = (value: number) =>
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
+
+const getCurrentLocalDateTime = () => {
+  const now = new Date();
+  const timezoneOffset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 16);
+};
 
 const DeliveryAddressCard = ({
   customerName,
@@ -239,6 +247,7 @@ const DeliveryAddressCard = ({
             value={deliveryDate}
             onChange={(event) => setDeliveryDate(event.target.value)}
             disabled={disabledDeliveryDate}
+            readOnly
           />
         </div>
       </label>
@@ -342,28 +351,34 @@ const PaymentMethodCard = ({
       <button
         type="button"
         onClick={() => setMethod("ONLINE")}
-        className={`rounded-2xl border p-4 text-left transition ${
+        title="Secure online payment using Razorpay checkout."
+        className={`group relative rounded-2xl border p-4 text-left transition ${
           method === "ONLINE"
             ? "border-sky-500 bg-sky-50 shadow-sm"
             : "border-slate-200 bg-white hover:border-slate-300"
         }`}
       >
         <p className="text-sm font-semibold text-slate-900">Online Payment</p>
-        <p className="mt-1 text-sm text-slate-500">Secure online payment using Razorpay checkout.</p>
+        <span className="pointer-events-none absolute -top-3 left-1/2 z-10 hidden w-64 -translate-x-1/2 -translate-y-full rounded-xl border border-sky-100 bg-sky-50/95 px-3 py-2 text-xs font-medium text-sky-900 shadow-[0_10px_30px_rgba(14,165,233,0.12)] backdrop-blur-sm group-hover:block">
+          Secure online payment using Razorpay checkout.
+        </span>
       </button>
 
       {allowCashOnDelivery && (
         <button
           type="button"
           onClick={() => setMethod("CASH_ON_DELIVERY")}
-          className={`rounded-2xl border p-4 text-left transition ${
+          title="Pay in cash when the order is delivered to your address."
+          className={`group relative rounded-2xl border p-4 text-left transition ${
             method === "CASH_ON_DELIVERY"
               ? "border-slate-500 bg-slate-50 shadow-sm"
               : "border-slate-200 bg-white hover:border-slate-300"
           }`}
         >
           <p className="text-sm font-semibold text-slate-900">Cash on Delivery</p>
-          <p className="mt-1 text-sm text-slate-500">Pay in cash when the order is delivered to your address.</p>
+          <span className="pointer-events-none absolute -top-3 left-1/2 z-10 hidden w-64 -translate-x-1/2 -translate-y-full rounded-xl border border-sky-100 bg-sky-50/95 px-3 py-2 text-xs font-medium text-sky-900 shadow-[0_10px_30px_rgba(14,165,233,0.12)] backdrop-blur-sm group-hover:block">
+            Pay in cash when the order is delivered to your address.
+          </span>
         </button>
       )}
 
@@ -371,14 +386,17 @@ const PaymentMethodCard = ({
         <button
           type="button"
           onClick={() => setMethod("PAY_LATER")}
-          className={`rounded-2xl border p-4 text-left transition ${
+          title="Request admin-approved credit terms for this order."
+          className={`group relative rounded-2xl border p-4 text-left transition ${
             method === "PAY_LATER"
               ? "border-amber-500 bg-amber-50 shadow-sm"
               : "border-slate-200 bg-white hover:border-slate-300"
           }`}
         >
           <p className="text-sm font-semibold text-slate-900">Pay Later</p>
-          <p className="mt-1 text-sm text-slate-500">Request admin-approved credit terms for this order.</p>
+          <span className="pointer-events-none absolute -top-3 left-1/2 z-10 hidden w-64 -translate-x-1/2 -translate-y-full rounded-xl border border-sky-100 bg-sky-50/95 px-3 py-2 text-xs font-medium text-sky-900 shadow-[0_10px_30px_rgba(14,165,233,0.12)] backdrop-blur-sm group-hover:block">
+            Request admin-approved credit terms for this order.
+          </span>
         </button>
       )}
     </div>
@@ -433,7 +451,7 @@ const OrderSummaryCard = ({
         <span className="font-semibold text-slate-900">{formatCurrency(deliveryCharges)}</span>
       </div>
       <div className="flex items-center justify-between">
-        <span>Tax</span>
+        <span>Tax (GST {GST_RATE}%)</span>
         <span className="font-semibold text-slate-900">{formatCurrency(tax)}</span>
       </div>
       <div className="border-t border-dashed border-slate-200 pt-4">
@@ -473,8 +491,10 @@ const CheckoutPayment = () => {
   const [phoneNumber, setPhoneNumber] = useState(localStorage.getItem("userNumber") || "");
   const [email, setEmail] = useState(localStorage.getItem("userEmail") || "");
   const [address, setAddress] = useState(paymentState?.existingAddress || "");
-  const [deliveryDate, setDeliveryDate] = useState(paymentState?.existingDeliveryDate || "");
-  const [method, setMethod] = useState<PaymentMethod>("ONLINE");
+  const [deliveryDate, setDeliveryDate] = useState(
+    paymentState?.existingDeliveryDate || (isExistingOrderPayment ? "" : getCurrentLocalDateTime()),
+  );
+  const [method, setMethod] = useState<SelectedPaymentMethod>("");
   const [creditDays, setCreditDays] = useState<15 | 30>(15);
 
   useEffect(() => {
@@ -522,6 +542,12 @@ const CheckoutPayment = () => {
     void run();
   }, [existingOrderId, isExistingOrderPayment, paymentState?.existingAmount]);
 
+  useEffect(() => {
+    if (!isExistingOrderPayment && !deliveryDate) {
+      setDeliveryDate(getCurrentLocalDateTime());
+    }
+  }, [deliveryDate, isExistingOrderPayment]);
+
   const initialCart = useMemo(() => {
     if (isExistingOrderPayment) return [];
     const stateCart = (location.state as { cart?: CartItem[] } | null)?.cart;
@@ -542,7 +568,7 @@ const CheckoutPayment = () => {
     ? existingOrderAmount
     : cart.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
   const deliveryCharges = 0;
-  const tax = 0;
+  const tax = (subtotal * GST_RATE) / 100;
   const totalAmount = subtotal + deliveryCharges + tax;
 
   const persistCart = (items: CartItem[]) => {
@@ -687,6 +713,11 @@ const CheckoutPayment = () => {
       return;
     }
 
+    if (!method) {
+      setError("Select payment mode.");
+      return;
+    }
+
     if (method === "PAY_LATER") {
       if (materialItems.length > 0) {
         setError("Pay later is available only for concrete orders.");
@@ -714,8 +745,8 @@ const CheckoutPayment = () => {
           throw new Error("No payable amount found for this order.");
         }
 
-        paymentId = await openRazorpayCheckout(existingOrderAmount);
-        await recordPayment(existingOrderId, existingOrderAmount, `ONLINE|RAZORPAY:${paymentId}`);
+        paymentId = await openRazorpayCheckout(totalAmount);
+        await recordPayment(existingOrderId, totalAmount, `ONLINE|RAZORPAY:${paymentId}`);
         playPaymentSuccessSound();
         toast.success("Payment successful. Your order has been placed.");
         navigate(`/order-tracking/${encodeURIComponent(existingOrderId)}`);
@@ -768,26 +799,32 @@ const CheckoutPayment = () => {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)]">
+      {error && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/25 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-rose-200 bg-white p-6 text-center shadow-[0_24px_60px_rgba(15,23,42,0.2)]">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-xl font-bold text-rose-600">
+              !
+            </div>
+
+            <p className="mt-2 text-sm text-rose-600">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="mt-5 rounded-2xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-500"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto max-w-7xl px-4 pb-12 pt-24 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600">Secure Checkout</p>
             <h1 className="mt-2 text-3xl font-bold text-slate-900">Checkout Payment</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Review your delivery details, confirm order items, and complete payment through a streamlined e-commerce checkout.
-            </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-            <p className="font-semibold text-slate-900">{isExistingOrderPayment ? "Existing Order Payment" : "Cart Checkout"}</p>
-            <p className="mt-1">{formatCurrency(totalAmount)} payable today</p>
-          </div>
+         
         </div>
-
-        {error && (
-          <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
-            {error}
-          </div>
-        )}
 
         {!isExistingOrderPayment && cart.length === 0 ? (
           <section className={`${cardShell} text-center`}>
