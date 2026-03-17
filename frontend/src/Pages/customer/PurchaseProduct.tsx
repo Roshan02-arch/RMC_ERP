@@ -69,6 +69,18 @@ type CartItem = {
 const isNewStock = (createdAt: string) =>
   Date.now() - new Date(createdAt).getTime() < 15 * 60 * 1000;
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const formatDateTime = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+};
+
 const parseReminderIds = (rawValue: string | null) => {
   if (!rawValue) return [];
   try {
@@ -381,64 +393,111 @@ const PurchaseProduct = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="flex items-center justify-center p-6 pt-24">
-        <div className="w-full max-w-7xl bg-white rounded-2xl shadow-xl p-8">
-          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">RMC Store</h2>
-            <div className="flex flex-col items-end gap-2">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe_0%,#f8fafc_32%,#eef2ff_100%)]">
+      <div className="px-4 pb-10 pt-24 sm:px-6">
+        <div className="mx-auto w-full max-w-7xl space-y-8">
+          <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_55%,#38bdf8_100%)] p-8 text-white shadow-[0_28px_70px_rgba(15,23,42,0.22)] sm:p-10">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-100/90">Smart Ordering Desk</p>
+                <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Purchase concrete and raw materials with confidence</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-50/90 sm:text-base">
+                  Explore available stock, add items to your cart, manage reminders, and keep track of recent orders from one clean workspace.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-[0.2em] text-blue-100/75">Concrete Mixes</p>
+                  <p className="mt-1 text-2xl font-bold">{products.length}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-[0.2em] text-blue-100/75">Raw Materials</p>
+                  <p className="mt-1 text-2xl font-bold">{materials.length}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-xs uppercase tracking-[0.2em] text-blue-100/75">Total Orders</p>
+                  <p className="mt-1 text-2xl font-bold">{orders.length + materialOrders.length}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="rounded-[30px] border border-slate-200 bg-white/95 p-6 shadow-[0_20px_55px_rgba(15,23,42,0.10)] backdrop-blur-sm sm:p-8">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600">RMC Store</p>
+                <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Choose what you want to order</h2>
+                <p className="mt-2 text-sm text-slate-500">Switch between ready-mix concrete and raw materials, then add your required quantity to the cart.</p>
+              </div>
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                <button
+                  type="button"
+                  onClick={() => navigate("/checkout-payment")}
+                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition hover:bg-slate-800"
+                >
+                  Go To Cart
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-6 inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
               <button
                 type="button"
-                onClick={() => navigate("/checkout-payment")}
-                className="px-5 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+                className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
+                  selectedTab === "concrete" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+                onClick={() => setSelectedTab("concrete")}
               >
-                Go To Cart
+                Mix Concrete
+              </button>
+              <button
+                type="button"
+                className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${
+                  selectedTab === "material" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+                onClick={() => setSelectedTab("material")}
+              >
+                Raw Materials
               </button>
             </div>
-          </div>
 
-          <div className="rounded-xl border border-gray-200 p-1 flex w-fit mb-6">
-            <button
-              type="button"
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                selectedTab === "concrete" ? "bg-gray-900 text-white" : "text-gray-700"
-              }`}
-              onClick={() => setSelectedTab("concrete")}
-            >
-              Mix Concrete
-            </button>
-            <button
-              type="button"
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                selectedTab === "material" ? "bg-gray-900 text-white" : "text-gray-700"
-              }`}
-              onClick={() => setSelectedTab("material")}
-            >
-              Raw Materials
-            </button>
-          </div>
+            {error && <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-          {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4 text-sm">{error}</div>}
-
-          {selectedTab === "concrete" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {products.map((p) => (
-                <div key={p.id} className="border border-gray-200 rounded-xl bg-white">
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-gray-900">{p.name}</p>
+            {selectedTab === "concrete" ? (
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {products.map((p) => (
+                  <div key={p.id} className="group rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_35px_rgba(15,23,42,0.10)]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-bold text-slate-900">{p.name}</p>
+                        <p className="mt-1 text-sm text-slate-500">Ready mix concrete</p>
+                      </div>
                       {isNewStock(p.createdAt) && (
-                        <span className="px-2 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700">
-                          NEW
+                        <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                          New
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">Rs.{p.pricePerUnit} / {p.unit}</p>
-                    <p className="text-xs text-gray-500 mt-1">Available: {p.availableQuantity} {p.unit}</p>
-                    <p className={`text-xs font-semibold mt-1 ${p.availableQuantity > 0 ? "text-green-600" : "text-red-600"}`}>
-                      {p.availableQuantity > 0 ? "in stock" : "out of stock"}
-                    </p>
-                    <div className="mt-3 flex items-center gap-2">
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Rate</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatCurrency(p.pricePerUnit)} / {p.unit}</p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Available</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{p.availableQuantity} {p.unit}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${p.availableQuantity > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                        {p.availableQuantity > 0 ? "In Stock" : "Out of Stock"}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 flex items-center gap-3">
                       <input
                         type="number"
                         min={1}
@@ -446,25 +505,26 @@ const PurchaseProduct = () => {
                         onChange={(e) =>
                           setProductQtyMap((prev) => ({ ...prev, [p.id]: Number(e.target.value) || 1 }))
                         }
-                        className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        className="w-24 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                       />
                       <button
                         type="button"
                         onClick={() => addConcreteToCart(p)}
                         disabled={p.availableQuantity <= 0}
-                        className="flex-1 px-4 py-2.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60"
+                        className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                       >
                         {p.availableQuantity <= 0 ? "Out of Stock" : "Add to Cart"}
                       </button>
                     </div>
+
                     {p.availableQuantity <= 0 && (
                       <button
                         type="button"
                         onClick={() => void toggleRestockReminder(p)}
-                        className={`mt-2 w-full px-4 py-2 rounded-lg border text-sm font-semibold transition inline-flex items-center justify-center gap-2 ${
+                        className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
                           isReminderEnabled(p.id)
                             ? "border-amber-300 bg-amber-50 text-amber-700"
-                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                         }`}
                       >
                         <FiBell />
@@ -472,22 +532,35 @@ const PurchaseProduct = () => {
                       </button>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {materials.map((m) => (
-                <div key={m.id} className="border border-gray-200 rounded-xl bg-white">
-                  <div className="p-4">
-                    <p className="font-semibold text-gray-900">{m.name}</p>
-                    <p className="text-sm text-gray-600 mt-1">Supplier: {m.supplier || "-"}</p>
-                    <p className="text-sm text-gray-600 mt-1">Rs.{m.pricePerUnit} / {m.unit}</p>
-                    <p className="text-xs text-gray-500 mt-1">Available: {m.quantity} {m.unit}</p>
-                    <p className={`text-xs font-semibold mt-1 ${m.quantity > 0 ? "text-green-600" : "text-red-600"}`}>
-                      {m.quantity > 0 ? "in stock" : "out of stock"}
-                    </p>
-                    <div className="mt-3 flex items-center gap-2">
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {materials.map((m) => (
+                  <div key={m.id} className="group rounded-[26px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_35px_rgba(15,23,42,0.10)]">
+                    <div>
+                      <p className="text-lg font-bold text-slate-900">{m.name}</p>
+                      <p className="mt-1 text-sm text-slate-500">Supplier: {m.supplier || "-"}</p>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Rate</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatCurrency(m.pricePerUnit)} / {m.unit}</p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Available</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{m.quantity} {m.unit}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${m.quantity > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                        {m.quantity > 0 ? "In Stock" : "Out of Stock"}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 flex items-center gap-3">
                       <input
                         type="number"
                         min={1}
@@ -495,70 +568,120 @@ const PurchaseProduct = () => {
                         onChange={(e) =>
                           setMaterialQtyMap((prev) => ({ ...prev, [m.id]: Number(e.target.value) || 1 }))
                         }
-                        className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        className="w-24 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                       />
                       <button
                         type="button"
                         onClick={() => addMaterialToCart(m)}
                         disabled={m.quantity <= 0}
-                        className="flex-1 px-4 py-2.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold disabled:opacity-60"
+                        className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                       >
                         {m.quantity <= 0 ? "Out of Stock" : "Add to Cart"}
                       </button>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <section className="grid gap-8 lg:grid-cols-2">
+            <div className="rounded-[30px] border border-slate-200 bg-white/95 p-6 shadow-[0_20px_55px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-8">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600">Recent Orders</p>
+                  <h2 className="mt-2 text-2xl font-bold text-slate-900">Concrete Order History</h2>
                 </div>
-              ))}
-            </div>
-          )}
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{orders.length} orders</span>
+              </div>
 
-          <div className="my-10 border-t border-gray-200" />
+              <div className="space-y-4">
+                {orders.map((order) => (
+                  <div key={order.id} className="rounded-[24px] border border-slate-200 bg-slate-50 p-5 transition hover:border-slate-300 hover:bg-white">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">{order.orderId}</p>
+                        <p className="mt-2 text-lg font-bold text-slate-900">{order.grade}</p>
+                      </div>
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        {order.status.replaceAll("_", " ")}
+                      </span>
+                    </div>
 
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Concrete Order History</h2>
-          <div className="space-y-4 mb-10">
-            {orders.map((order) => (
-              <div key={order.id} className="bg-gray-50 p-5 rounded-xl border border-gray-200">
-                <p className="text-sm"><strong>Order ID:</strong> {order.orderId}</p>
-                <p className="text-sm"><strong>Product:</strong> {order.grade}</p>
-                <p className="text-sm"><strong>Quantity:</strong> {order.quantity} m3</p>
-                <p className="text-sm"><strong>Total:</strong> Rs.{order.totalPrice}</p>
-                <p className="text-sm"><strong>Status:</strong> {order.status.replaceAll("_", " ")}</p>
-                {String(order.paymentOption || "").toUpperCase() === "PAY_LATER" && (
-                  <p className="text-sm">
-                    <strong>Credit:</strong> {(order.creditApprovalStatus || "PENDING").replaceAll("_", " ")}
-                    {order.creditDays ? ` (${order.creditDays} days)` : ""}
-                  </p>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
+                      <p><span className="font-semibold text-slate-900">Quantity:</span> {order.quantity} m3</p>
+                      <p><span className="font-semibold text-slate-900">Total:</span> {formatCurrency(order.totalPrice)}</p>
+                    </div>
+
+                    {String(order.paymentOption || "").toUpperCase() === "PAY_LATER" && (
+                      <p className="mt-3 text-sm text-slate-600">
+                        <span className="font-semibold text-slate-900">Credit:</span> {(order.creditApprovalStatus || "PENDING").replaceAll("_", " ")}
+                        {order.creditDays ? ` (${order.creditDays} days)` : ""}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={() => deleteConcreteOrder(order)}
+                      disabled={deletingOrderId === order.id}
+                      className="mt-4 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
+                    >
+                      {deletingOrderId === order.id ? "Deleting..." : "Delete Order"}
+                    </button>
+                  </div>
+                ))}
+                {orders.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    No concrete orders yet.
+                  </div>
                 )}
-                <button
-                  onClick={() => deleteConcreteOrder(order)}
-                  disabled={deletingOrderId === order.id}
-                  className="mt-3 px-4 py-2 rounded-md bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-60"
-                >
-                  {deletingOrderId === order.id ? "Deleting..." : "Delete Order"}
-                </button>
               </div>
-            ))}
-          </div>
+            </div>
 
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Raw Material Order History</h2>
-          <div className="space-y-4">
-            {materialOrders.map((order) => (
-              <div key={order.id} className="bg-gray-50 p-5 rounded-xl border border-gray-200">
-                <p className="text-sm"><strong>Material:</strong> {order.materialName}</p>
-                <p className="text-sm"><strong>Quantity:</strong> {order.quantity} {order.unit}</p>
-                <p className="text-sm"><strong>Price:</strong> Rs.{order.pricePerUnit} / {order.unit}</p>
-                <p className="text-sm"><strong>Total:</strong> Rs.{order.totalPrice}</p>
-                <p className="text-sm"><strong>Address:</strong> {order.address}</p>
-                <p className="text-sm"><strong>Date:</strong> {new Date(order.createdAt).toLocaleString()}</p>
-                <button
-                  onClick={() => deleteMaterialOrder(order)}
-                  className="mt-3 px-4 py-2 rounded-md bg-red-600 hover:bg-red-500 text-white text-sm font-medium"
-                >
-                  Delete Raw Material Order
-                </button>
+            <div className="rounded-[30px] border border-slate-200 bg-white/95 p-6 shadow-[0_20px_55px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-8">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600">Recent Orders</p>
+                  <h2 className="mt-2 text-2xl font-bold text-slate-900">Raw Material Order History</h2>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{materialOrders.length} orders</span>
               </div>
-            ))}
-          </div>
+
+              <div className="space-y-4">
+                {materialOrders.map((order) => (
+                  <div key={order.id} className="rounded-[24px] border border-slate-200 bg-slate-50 p-5 transition hover:border-slate-300 hover:bg-white">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-bold text-slate-900">{order.materialName}</p>
+                        <p className="mt-1 text-sm text-slate-500">{formatDateTime(order.createdAt)}</p>
+                      </div>
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        {order.status}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 space-y-2 text-sm text-slate-600">
+                      <p><span className="font-semibold text-slate-900">Quantity:</span> {order.quantity} {order.unit}</p>
+                      <p><span className="font-semibold text-slate-900">Price:</span> {formatCurrency(order.pricePerUnit)} / {order.unit}</p>
+                      <p><span className="font-semibold text-slate-900">Total:</span> {formatCurrency(order.totalPrice)}</p>
+                      <p><span className="font-semibold text-slate-900">Address:</span> {order.address}</p>
+                    </div>
+
+                    <button
+                      onClick={() => deleteMaterialOrder(order)}
+                      className="mt-4 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500"
+                    >
+                      Delete Raw Material Order
+                    </button>
+                  </div>
+                ))}
+                {materialOrders.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    No raw material orders yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
       </div>
       {dialogNode}

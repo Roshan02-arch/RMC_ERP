@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
-
-
+import profileBg from "../../assets/background.png";
 
 type ProfileForm = {
   name: string;
@@ -24,7 +23,10 @@ const getFallbackProfile = (): ProfileForm => ({
   address: localStorage.getItem("userAddress") || "",
 });
 
-const parseApiResult = async (response: Response, defaultMessage: string): Promise<ApiResult> => {
+const parseApiResult = async (
+  response: Response,
+  defaultMessage: string
+): Promise<ApiResult> => {
   const raw = await response.text();
   let message = defaultMessage;
 
@@ -104,7 +106,9 @@ const CustomizeProfile = () => {
     void fetchProfile();
   }, [fetchProfile, navigate, userId]);
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
@@ -137,44 +141,61 @@ const CustomizeProfile = () => {
 
     setSaving(true);
     try {
-      const primaryResponse = await fetch(`http://localhost:8080/api/users/${userId}/profile`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          number,
-          address,
-        }),
-      });
-
-      let result = await parseApiResult(primaryResponse, "Profile updated successfully");
-
-      if (!result.ok && (result.status === 404 || result.status === 405)) {
-        const currentUserResponse = await fetch(`http://localhost:8080/api/users/${userId}`);
-        if (!currentUserResponse.ok) {
-          const currentUserResult = await parseApiResult(currentUserResponse, "Unable to update profile");
-          setError(currentUserResult.message);
-          return;
-        }
-
-        const currentUser = await currentUserResponse.json();
-        const legacyUpdateResponse = await fetch(`http://localhost:8080/api/users/${userId}`, {
+      const primaryResponse = await fetch(
+        `http://localhost:8080/api/users/${userId}/profile`,
+        {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            ...currentUser,
             name,
             email,
             number,
             address,
           }),
-        });
-        result = await parseApiResult(legacyUpdateResponse, "Profile updated successfully");
+        }
+      );
+
+      let result = await parseApiResult(
+        primaryResponse,
+        "Profile updated successfully"
+      );
+
+      if (!result.ok && (result.status === 404 || result.status === 405)) {
+        const currentUserResponse = await fetch(
+          `http://localhost:8080/api/users/${userId}`
+        );
+        if (!currentUserResponse.ok) {
+          const currentUserResult = await parseApiResult(
+            currentUserResponse,
+            "Unable to update profile"
+          );
+          setError(currentUserResult.message);
+          return;
+        }
+
+        const currentUser = await currentUserResponse.json();
+        const legacyUpdateResponse = await fetch(
+          `http://localhost:8080/api/users/${userId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...currentUser,
+              name,
+              email,
+              number,
+              address,
+            }),
+          }
+        );
+        result = await parseApiResult(
+          legacyUpdateResponse,
+          "Profile updated successfully"
+        );
       }
 
       if (!result.ok) {
@@ -198,88 +219,120 @@ const CustomizeProfile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="pt-24 px-6 pb-8">
-        <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-md border border-gray-200 p-6">
-          <h1 className="text-2xl font-semibold text-gray-800 mb-1">Customize Profile</h1>
-          <p className="text-sm text-gray-500 mb-6">Edit your details and save them to your account.</p>
+    <div
+      className="relative min-h-screen bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: `url(${profileBg})` }}
+    >
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-black/45" />
+
+      {/* Content */}
+      <div className="relative z-10 px-6 pb-10 pt-24">
+        <div className="mx-auto max-w-3xl rounded-[28px] border border-white/20 bg-white/90 p-8 shadow-[0_22px_55px_rgba(0,0,0,0.28)] backdrop-blur-md sm:p-10">
+          <div className="mb-8 border-b border-slate-200 pb-5">
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+              Customize Profile
+            </h1>
+          </div>
 
           {loading ? (
-            <p className="text-sm text-gray-500">Loading profile...</p>
+            <p className="text-sm text-slate-600">Loading profile...</p>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {success && <p className="text-sm text-green-600">{success}</p>}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {success && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  {success}
+                </div>
+              )}
 
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  value={form.name}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-                />
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="name"
+                    className="mb-2 block text-sm font-semibold text-slate-700"
+                  >
+                    Full Name
+                  </label>
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={form.name}
+                    onChange={handleChange}
+                    className="w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="mb-2 block text-sm font-semibold text-slate-700"
+                  >
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    className="w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="number"
+                    className="mb-2 block text-sm font-semibold text-slate-700"
+                  >
+                    Mobile Number
+                  </label>
+                  <input
+                    id="number"
+                    name="number"
+                    type="text"
+                    value={form.number}
+                    onChange={handleChange}
+                    className="w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="address"
+                    className="mb-2 block text-sm font-semibold text-slate-700"
+                  >
+                    Address
+                  </label>
+                  <textarea
+                    id="address"
+                    name="address"
+                    value={form.address}
+                    onChange={handleChange}
+                    rows={4}
+                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-                />
-              </div>
+              {error && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {error}
+                </div>
+              )}
 
-              <div>
-                <label htmlFor="number" className="block text-sm font-medium text-gray-700 mb-1">
-                  Mobile Number
-                </label>
-                <input
-                  id="number"
-                  name="number"
-                  type="text"
-                  value={form.number}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                  Address
-                </label>
-                <textarea
-                  id="address"
-                  name="address"
-                  value={form.address}
-                  onChange={handleChange}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-                />
-              </div>
-
-              {error && <p className="text-sm text-red-600">{error}</p>}
-
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-3 border-t border-slate-200 pt-6">
                 <button
                   type="button"
                   onClick={() => navigate("/home")}
-                  className="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                  className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg text-sm bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-60 transition"
+                  className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(37,99,235,0.25)] transition hover:bg-blue-500 disabled:opacity-60"
                 >
                   {saving ? "Saving..." : "Save Changes"}
                 </button>
