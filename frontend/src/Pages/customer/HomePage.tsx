@@ -3,20 +3,23 @@ import { NavLink, Link, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import { FaCubes, FaUserTie, FaTruckFast, FaHandshake } from "react-icons/fa6";
 import GlobalFooter from "../../components/GlobalFooter";
+import rmc1 from "../../assets/rmc.jpg";
+import rmc2 from "../../assets/rmc1.jpg";
+import rmc3 from "../../assets/RMC-Plant-HD-Image-1.webp";
 
 const slides = [
   {
-    image: "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc",
+    image: rmc1,
     title: "Premium Ready Mix Concrete",
     subtitle: "High quality concrete delivered on time.",
   },
   {
-    image: "https://images.unsplash.com/photo-1503387762-592deb58ef4e",
+    image: rmc2,
     title: "Strong Foundations Start Here",
     subtitle: "Trusted by engineers & builders.",
   },
   {
-    image: "https://images.unsplash.com/photo-1504307651254-35680f356dfd",
+    image: rmc3,
     title: "Smart ERP for RMC Industry",
     subtitle: "Manage orders, dispatch & delivery easily.",
   },
@@ -166,7 +169,7 @@ const HomePage = () => {
           <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8 md:gap-10 items-start">
             <div>
               <img
-                src="https://images.unsplash.com/photo-1599707254554-027aeb4deacd?auto=format&fit=crop&w=1400&q=80"
+                src="src\assets\about.jpg.webp"
                 alt="RMC Plant"
                 className="w-full h-56 sm:h-72 md:h-80 lg:h-[460px] object-cover rounded-2xl shadow-lg"
               />
@@ -288,7 +291,7 @@ const HomePage = () => {
         </section>
 
         {/* Core Values Section */}
-        <section className="py-12 sm:py-16 md:py-24 px-4 sm:px-6 bg-[#efefef]">
+        <section className="py-12 sm:py-16 md:py-24 px-4 sm:px-6">
           <div className="max-w-7xl mx-auto">
             <div className="text-center mb-10 sm:mb-12 md:mb-14">
               <p className="text-sky-600 tracking-[0.18em] text-xs sm:text-sm md:text-base font-semibold uppercase">
