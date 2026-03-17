@@ -501,7 +501,7 @@ const BillingPayment = () => {
       pdf.text(formatCurrency(targetTotalPayable), 170, y);
       y += 4;
       pdf.text("Late payment terms apply for approved pay-later orders.", marginX, y);
-      pdf.text(`Tax ${GST_RATE}%`, 160, y);
+      pdf.text(`GST ${GST_RATE}%: ${formatCurrency(targetGstAmount)}`, 142, y);
       y += 4;
       pdf.text("This invoice is generated digitally and valid without signature.", marginX, y);
 
@@ -693,12 +693,16 @@ const BillingPayment = () => {
                       <div className="md:pl-8">
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between text-slate-700">
-                            <span>Total</span>
+                            <span>Subtotal</span>
                             <span>{formatCurrency(subtotal)}</span>
                           </div>
                           <div className="flex justify-between text-slate-700">
-                            <span>Taxes</span>
-                            <span>{GST_RATE}%</span>
+                            <span>GST ({GST_RATE}%)</span>
+                            <span>{formatCurrency(gstAmount)}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-900 font-semibold">
+                            <span>Total</span>
+                            <span>{formatCurrency(totalPayable)}</span>
                           </div>
                           <div className="flex justify-between text-slate-700">
                             <span>Payment Status</span>

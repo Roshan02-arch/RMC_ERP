@@ -13,3 +13,190 @@
 .admin-outlet-root aside {
   display: none !important;
 }
+
+.quotation-print-root,
+.quotation-print-root * {
+  box-sizing: border-box;
+}
+
+.quotation-print-root {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  font-family: Arial, sans-serif;
+  border: 1px solid #000;
+  padding: 24px 28px;
+}
+
+.quotation-print-root p {
+  margin: 0;
+}
+
+.quotation-print-root ul {
+  margin: 4px 0 10px;
+}
+
+.quotation-print-root li {
+  line-height: 1.45;
+}
+
+.quotation-no-print {
+  display: block;
+}
+
+.quotation-row-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.quotation-header-grid {
+  display: grid;
+  grid-template-columns: 1fr 58mm;
+  column-gap: 6mm;
+  align-items: start;
+}
+
+.quotation-header-left,
+.quotation-header-right {
+  width: 100%;
+}
+
+.quotation-row-left,
+.quotation-row-right {
+  display: block;
+}
+
+.quotation-inline-field {
+  width: auto;
+  max-width: none;
+  white-space: nowrap;
+  vertical-align: bottom;
+  line-height: 1.2;
+  margin: 2px 0;
+}
+
+.quotation-table-wrap {
+  width: 100%;
+  overflow: hidden;
+}
+
+.quotation-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.quotation-table th,
+.quotation-table td {
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.quotation-table th {
+  padding: 7px 8px;
+}
+
+.quotation-table td {
+  padding: 6px 8px;
+}
+
+.quotation-print-keep,
+.quotation-print-root table,
+.quotation-print-root tr,
+.quotation-print-root thead,
+.quotation-print-root tbody {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.quotation-print-root {
+  page-break-after: auto;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .quotation-print-root {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    border: 1px solid #000 !important;
+    padding: 24px 28px !important;
+  }
+
+  .quotation-row-split {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .quotation-no-print {
+    display: none !important;
+  }
+
+  .quotation-header-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 58mm !important;
+    column-gap: 6mm !important;
+    align-items: start !important;
+  }
+
+  .quotation-row-left,
+  .quotation-row-right {
+    display: table-cell !important;
+    vertical-align: top !important;
+  }
+
+  .quotation-row-right {
+    text-align: right !important;
+  }
+
+  .quotation-inline-field {
+    white-space: nowrap !important;
+    flex: none !important;
+    line-height: 1.2 !important;
+    margin: 2px 0 !important;
+  }
+
+  .quotation-table-wrap {
+    overflow: hidden !important;
+  }
+
+  .quotation-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+  }
+
+  .quotation-table th,
+  .quotation-table td {
+    line-height: 1.35 !important;
+    vertical-align: middle !important;
+  }
+
+  .quotation-table th {
+    padding: 7px 8px !important;
+  }
+
+  .quotation-table td {
+    padding: 6px 8px !important;
+  }
+}

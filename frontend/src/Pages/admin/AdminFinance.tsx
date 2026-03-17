@@ -27,8 +27,58 @@ type PaymentRecord = {
 };
 
 type Mode = "WEEKLY" | "MONTHLY" | "YEARLY";
+type SsdGrade = "M-7.5" | "M-10" | "M-15" | "M-20" | "M-25" | "M-30" | "M-35" | "M-40";
+
+type SsdIngredientRow = {
+  ingredient: string;
+  rate: number;
+  values: Record<SsdGrade, number>;
+};
 
 const RATE_MAP: Record<string, number> = { M10: 4200, M15: 4600, M20: 5000, M25: 5500, M30: 6000, M35: 6500, M40: 7200, M45: 7700, M50: 8300 };
+const SSD_GRADES: SsdGrade[] = ["M-7.5", "M-10", "M-15", "M-20", "M-25", "M-30", "M-35", "M-40"];
+const SSD_ROWS: SsdIngredientRow[] = [
+  {
+    ingredient: "PFA",
+    rate: 1.75,
+    values: { "M-7.5": 70, "M-10": 60, "M-15": 60, "M-20": 60, "M-25": 45, "M-30": 60, "M-35": 100, "M-40": 65 },
+  },
+  {
+    ingredient: "OPC CEMENT",
+    rate: 7,
+    values: { "M-7.5": 100, "M-10": 170, "M-15": 200, "M-20": 270, "M-25": 290, "M-30": 310, "M-35": 330, "M-40": 380 },
+  },
+  {
+    ingredient: "GGBS",
+    rate: 4.2,
+    values: { "M-7.5": 0, "M-10": 0, "M-15": 0, "M-20": 0, "M-25": 0, "M-30": 0, "M-35": 0, "M-40": 0 },
+  },
+  {
+    ingredient: "WATER",
+    rate: 0.1,
+    values: { "M-7.5": 160, "M-10": 170, "M-15": 170, "M-20": 170, "M-25": 170, "M-30": 170, "M-35": 170, "M-40": 170 },
+  },
+  {
+    ingredient: "WASH SAND",
+    rate: 0.9,
+    values: { "M-7.5": 908, "M-10": 900, "M-15": 930, "M-20": 920, "M-25": 900, "M-30": 850, "M-35": 900, "M-40": 780 },
+  },
+  {
+    ingredient: "20MM",
+    rate: 0.7,
+    values: { "M-7.5": 721, "M-10": 700, "M-15": 680, "M-20": 620, "M-25": 700, "M-30": 720, "M-35": 700, "M-40": 645 },
+  },
+  {
+    ingredient: "10MM",
+    rate: 0.7,
+    values: { "M-7.5": 480, "M-10": 400, "M-15": 453, "M-20": 412, "M-25": 400, "M-30": 390, "M-35": 411, "M-40": 405 },
+  },
+  {
+    ingredient: "ADMIXTURE",
+    rate: 59,
+    values: { "M-7.5": 2, "M-10": 2.4, "M-15": 2.3, "M-20": 2.4, "M-25": 2.3, "M-30": 2.2, "M-35": 2.3, "M-40": 2.4 },
+  },
+];
 const inr = (n: number) => `Rs.${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const yearKey = (d: Date) => `${d.getFullYear()}`;
@@ -74,6 +124,7 @@ const AdminFinance = () => {
   const [materialCostPerM3, setMaterialCostPerM3] = useState(3000);
   const [productionCostPerM3, setProductionCostPerM3] = useState(900);
   const [transportCostPerM3, setTransportCostPerM3] = useState(600);
+  const [selectedSsdGrade, setSelectedSsdGrade] = useState<SsdGrade>("M-7.5");
 
   useEffect(() => {
     if (localStorage.getItem("role") !== "ADMIN") {
@@ -227,6 +278,21 @@ const AdminFinance = () => {
     MONTHLY: monthlyRows,
     YEARLY: yearlyRows,
   };
+
+  const ssdRowsForGrade = useMemo(
+    () =>
+      SSD_ROWS.map((row) => {
+        const gradeValue = row.values[selectedSsdGrade] || 0;
+        const totalCost = gradeValue * row.rate;
+        return { ...row, gradeValue, totalCost };
+      }),
+    [selectedSsdGrade],
+  );
+
+  const ssdTotalCost = useMemo(
+    () => ssdRowsForGrade.reduce((sum, row) => sum + row.totalCost, 0),
+    [ssdRowsForGrade],
+  );
 
   const getModeSummary = (reportMode: Mode) => {
     const summaryStart = startForMode(reportMode);
@@ -439,6 +505,53 @@ const AdminFinance = () => {
           <div className="bg-white rounded-2xl shadow-md p-5"><p className="text-xs text-gray-500">Customers</p><p className="text-2xl font-bold text-slate-700">{customers.length}</p></div>
           <div className="bg-white rounded-2xl shadow-md p-5"><p className="text-xs text-gray-500">Estimated Cost</p><p className="text-2xl font-bold text-gray-700">{inr(totalCost)}</p></div>
           <div className="bg-white rounded-2xl shadow-md p-5"><p className="text-xs text-gray-500">Profit / Loss</p><p className={`text-2xl font-bold ${pnl >= 0 ? "text-emerald-700" : "text-red-700"}`}>{pnl >= 0 ? `Profit ${inr(pnlAbs)}` : `Loss ${inr(pnlAbs)}`}</p></div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-md p-6 border border-slate-200 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-800">MIX DESIGN SSD COST SHEET</h2>
+          <div className="flex flex-wrap gap-2">
+            {SSD_GRADES.map((grade) => (
+              <button
+                key={grade}
+                type="button"
+                onClick={() => setSelectedSsdGrade(grade)}
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+                  selectedSsdGrade === grade
+                    ? "bg-indigo-600 text-white"
+                    : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {grade}
+              </button>
+            ))}
+          </div>
+
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full text-sm text-gray-700">
+              <thead className="bg-gray-50 text-xs uppercase text-gray-600">
+                <tr>
+                  <th className="px-4 py-3 text-left">Ingredients</th>
+                  <th className="px-4 py-3 text-right">Rate</th>
+                  <th className="px-4 py-3 text-right">{selectedSsdGrade}</th>
+                  <th className="px-4 py-3 text-right">Total Cost</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {ssdRowsForGrade.map((row) => (
+                  <tr key={row.ingredient}>
+                    <td className="px-4 py-2.5 font-medium">{row.ingredient}</td>
+                    <td className="px-4 py-2.5 text-right">{row.rate.toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-right">{row.gradeValue.toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold">{row.totalCost.toFixed(2)}</td>
+                  </tr>
+                ))}
+                <tr className="bg-gray-50">
+                  <td className="px-4 py-3 font-bold" colSpan={3}>Total</td>
+                  <td className="px-4 py-3 text-right font-bold text-gray-900">{ssdTotalCost.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-md p-6 border border-slate-200">
