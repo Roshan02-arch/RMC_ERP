@@ -80,6 +80,7 @@ const AdminSchedule = () => {
     dispatchDateTime: "",
     tripPlanning: "SINGLE_TRIP",
     plannedTrips: "1",
+    deliverySequence: "STANDARD",
     truckCapacityM3: "6",
     estimatedTravelMinutes: "90",
     dispatchIntervalMinutes: "60",
@@ -611,6 +612,15 @@ const AdminSchedule = () => {
             <select value={dispatch.tripPlanning} onChange={(e) => setDispatch({ ...dispatch, tripPlanning: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-md">
               <option value="SINGLE_TRIP">Single Trip</option>
               <option value="MULTIPLE_TRIPS">Multiple Trips</option>
+            </select>
+            <select
+              value={dispatch.deliverySequence}
+              onChange={(e) => setDispatch({ ...dispatch, deliverySequence: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            >
+              <option value="STANDARD">Standard sequence</option>
+              <option value="PRIORITY_FIRST">Priority first</option>
+              <option value="SITE_ORDER">Site order</option>
             </select>
             <input
               type="number"
