@@ -113,12 +113,21 @@ public class OrderController {
 
             PaymentRecord saved = paymentRecordRepository.save(record);
 
-                order.setPaymentReceivedAt(paidAt);
+            String paymentOption = String.valueOf(order.getPaymentOption() == null ? "" : order.getPaymentOption()).trim().toUpperCase();
+            order.setPaymentReceivedAt(paidAt);
+            order.setPaymentStatus("PAID");
+
+            if ("PAY_LATER".equals(paymentOption)) {
+                order.setOrderWorkflowStatus("ORDER_CONFIRMED_PAYMENT_SUCCESSFUL");
+                order.setStatus(OrderStatus.APPROVED);
+                order.setLatestNotification("Order confirmed / payment successful.");
+            } else {
                 order.setOrderWorkflowStatus("PAID");
-                order.setPaymentStatus("PAID");
                 order.setStatus(OrderStatus.APPROVED);
                 order.setLatestNotification("Payment successful. Your order has been placed successfully.");
-                orderRepository.save(order);
+            }
+
+            orderRepository.save(order);
 
             // Log payment history
             approvalHistoryRepository.save(new OrderApprovalHistory(
@@ -279,6 +288,12 @@ public class OrderController {
             String paymentOption = String.valueOf(payload.getOrDefault("paymentOption", "ONLINE")).trim().toUpperCase();
             if (paymentOption.isEmpty()) {
                 paymentOption = "ONLINE";
+            }
+
+            if (!"ONLINE".equals(paymentOption) && !"PAY_LATER".equals(paymentOption)) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "message", "Only ONLINE and PAY_LATER payment options are supported"
+                ));
             }
 
             if ("PAY_LATER".equals(paymentOption)) {

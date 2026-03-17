@@ -494,7 +494,7 @@ const CheckoutPayment = () => {
   const [deliveryDate, setDeliveryDate] = useState(
     paymentState?.existingDeliveryDate || (isExistingOrderPayment ? "" : getCurrentLocalDateTime()),
   );
-  const [method, setMethod] = useState<SelectedPaymentMethod>("");
+  const [method, setMethod] = useState<SelectedPaymentMethod>("ONLINE");
   const [creditDays, setCreditDays] = useState<15 | 30>(15);
 
   useEffect(() => {
@@ -547,6 +547,12 @@ const CheckoutPayment = () => {
       setDeliveryDate(getCurrentLocalDateTime());
     }
   }, [deliveryDate, isExistingOrderPayment]);
+
+  useEffect(() => {
+    if (isExistingOrderPayment) {
+      setMethod("ONLINE");
+    }
+  }, [isExistingOrderPayment]);
 
   const initialCart = useMemo(() => {
     if (isExistingOrderPayment) return [];
@@ -718,19 +724,8 @@ const CheckoutPayment = () => {
       return;
     }
 
-    if (method === "PAY_LATER") {
-      if (materialItems.length > 0) {
-        setError("Pay later is available only for concrete orders.");
-        return;
-      }
-      navigate("/pay-later-request", {
-        state: {
-          cart,
-          address,
-          deliveryDate,
-          creditDays,
-        },
-      });
+    if (method !== "ONLINE") {
+      setError("Only online payment is allowed.");
       return;
     }
 
@@ -748,8 +743,13 @@ const CheckoutPayment = () => {
         paymentId = await openRazorpayCheckout(totalAmount);
         await recordPayment(existingOrderId, totalAmount, `ONLINE|RAZORPAY:${paymentId}`);
         playPaymentSuccessSound();
-        toast.success("Payment successful. Your order has been placed.");
-        navigate(`/order-tracking/${encodeURIComponent(existingOrderId)}`);
+        toast.success("Payment successful. Order confirmed.");
+        navigate("/pay-later-orders", {
+          state: {
+            successMessage: "Order Confirmed / Payment Successful",
+            selectedOrderId: existingOrderId,
+          },
+        });
         return;
       }
 
@@ -757,9 +757,16 @@ const CheckoutPayment = () => {
         throw new Error("No payable amount found for this order.");
       }
 
+      paymentId = await openRazorpayCheckout(totalAmount);
+
       for (const item of concreteItems) {
         const created = await createConcreteOrder(item, userId, method === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : "ONLINE");
         createdOrderIds.push(created.orderId);
+
+        const orderSubtotal = item.pricePerUnit * item.quantity;
+        const orderTax = (orderSubtotal * GST_RATE) / 100;
+        const orderTotal = orderSubtotal + orderTax;
+        await recordPayment(created.orderId, orderTotal, `ONLINE|RAZORPAY:${paymentId}`);
       }
 
       for (const item of materialItems) {
@@ -770,7 +777,8 @@ const CheckoutPayment = () => {
       }
 
       localStorage.removeItem(CART_KEY);
-      toast.success("Your order has been placed and is waiting for admin approval.");
+      playPaymentSuccessSound();
+      toast.success("Payment successful. Your order has been placed and is waiting for admin approval.");
       const firstConcreteOrderId = createdOrderIds[0] || "";
       const firstRawOrderId = createdRawOrderIds[0] || 0;
 
@@ -795,7 +803,9 @@ const CheckoutPayment = () => {
     }
   };
 
-  const primaryButtonLabel = loading ? "Processing Order..." : "Place Order";
+  const primaryButtonLabel = loading
+    ? (isExistingOrderPayment ? "Processing Payment..." : "Processing Order...")
+    : (isExistingOrderPayment ? "Pay Now" : "Place Order");
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)]">
@@ -868,8 +878,8 @@ const CheckoutPayment = () => {
                 setMethod={setMethod}
                 creditDays={creditDays}
                 setCreditDays={setCreditDays}
-                allowPayLater={!isExistingOrderPayment}
-                allowCashOnDelivery={!isExistingOrderPayment}
+                allowPayLater={false}
+                allowCashOnDelivery={false}
               />
             </div>
 

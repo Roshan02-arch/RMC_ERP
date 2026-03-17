@@ -32,11 +32,15 @@ const formatDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
 
-const isDueDateReached = (value?: string) => {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  return date.getTime() <= Date.now();
+const isPaid = (order: PayLaterOrder) => {
+  const workflow = String(order.orderWorkflowStatus || "").toUpperCase();
+  return (
+    !!order.paymentReceivedAt ||
+    String(order.status || "").toUpperCase() === "DELIVERED" ||
+    workflow.includes("PAYMENT_SUCCESSFUL") ||
+    workflow.includes("ORDER_CONFIRMED") ||
+    workflow === "COMPLETED"
+  );
 };
 
 const PayLaterOrderDetails = () => {
@@ -76,11 +80,10 @@ const PayLaterOrderDetails = () => {
 
   const showPayNow = useMemo(() => {
     if (!order) return false;
-    const rejected = String(order.creditApprovalStatus || "").toUpperCase() === "REJECTED";
     const approved = String(order.creditApprovalStatus || "").toUpperCase() === "APPROVED";
-    const completedWorkflow = String(order.orderWorkflowStatus || "").toUpperCase() === "COMPLETED";
-    const pendingPayment = !order.paymentReceivedAt;
-    return rejected || (approved && isDueDateReached(order.creditDueDate) && pendingPayment && !completedWorkflow);
+    const pendingPayment = !isPaid(order);
+    const orderNotRejected = String(order.status || "").toUpperCase() !== "REJECTED";
+    return approved && pendingPayment && orderNotRejected;
   }, [order]);
 
   if (loading) {
@@ -138,7 +141,7 @@ const PayLaterOrderDetails = () => {
         {showPayNow && (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-5 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-red-700">
-              Admin rejected your credit request. Complete your payment to place order.
+              Approved - Payment Pending. Complete online payment to confirm order.
             </p>
             <button
               type="button"
@@ -150,12 +153,13 @@ const PayLaterOrderDetails = () => {
                     existingAmount: Number(order.totalPrice || 0),
                     existingAddress: order.address,
                     existingDeliveryDate: order.creditDueDate,
+                    forceOnlineOnly: true,
                   },
                 })
               }
               className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold"
             >
-              Checkout Payment
+              Pay Now
             </button>
           </section>
         )}

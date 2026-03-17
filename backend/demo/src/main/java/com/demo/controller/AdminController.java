@@ -526,16 +526,18 @@ public class AdminController {
 
         order.setCreditStatus("APPROVED");
         order.setCreditApprovalStatus("APPROVED");
-        order.setOrderWorkflowStatus("CREDIT_APPROVED");
+        order.setOrderWorkflowStatus("APPROVED_PAYMENT_PENDING");
         order.setStatus(OrderStatus.APPROVED);
         order.setApprovedAt(now);
         order.setCreditReviewedAt(now);
+        order.setPaymentStatus("PENDING");
+        order.setPaymentReceivedAt(null);
         order.setCreditReviewRemark(remark.isEmpty() ? "Credit approved by admin" : remark);
         if (order.getCreditDueDate() == null) {
             int creditDays = order.getCreditDays() == null ? 15 : order.getCreditDays();
             order.setCreditDueDate((order.getCreatedAt() == null ? now : order.getCreatedAt()).plusDays(creditDays));
         }
-        order.setLatestNotification("Credit approved - Payment due on " + order.getCreditDueDate());
+        order.setLatestNotification("Approved - Payment Pending. Complete online payment to confirm order.");
         orderRepository.save(order);
         orderNotificationService.createNotification(order, NotificationType.CREDIT_APPROVED, order.getLatestNotification());
 

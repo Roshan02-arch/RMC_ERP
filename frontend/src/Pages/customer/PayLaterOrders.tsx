@@ -49,7 +49,22 @@ const isDueSoon = (value?: string, withinDays = 3) => {
 const isPaid = (order: Order) =>
   !!order.paymentReceivedAt ||
   String(order.paymentStatus || "").toUpperCase() === "PAID" ||
+  String(order.status || "").toUpperCase() === "DELIVERED" ||
+  String(order.orderWorkflowStatus || "").toUpperCase().includes("PAYMENT_SUCCESSFUL") ||
+  String(order.orderWorkflowStatus || "").toUpperCase().includes("ORDER_CONFIRMED") ||
+  String(order.orderWorkflowStatus || "").toUpperCase() === "COMPLETED" ||
   String(order.orderWorkflowStatus || "").toUpperCase() === "PAID";
+
+const isPayLaterOrder = (order: Order) => {
+  const paymentOption = String(order.paymentOption || "").toUpperCase();
+  const workflow = String(order.orderWorkflowStatus || "").toUpperCase();
+  const creditStatus = String(order.creditApprovalStatus || "").toUpperCase();
+  return (
+    paymentOption === "PAY_LATER" &&
+    creditStatus !== "NOT_APPLICABLE" &&
+    !workflow.startsWith("PAID")
+  );
+};
 
 const PayLaterOrders = () => {
   const navigate = useNavigate();
@@ -74,7 +89,7 @@ const PayLaterOrders = () => {
         }
         const data: Order[] = await res.json();
         const items = (Array.isArray(data) ? data : [])
-          .filter((order) => String(order.paymentOption || "").toUpperCase() === "PAY_LATER")
+          .filter((order) => isPayLaterOrder(order))
           .sort((a, b) => b.id - a.id);
         setOrders(items);
       } catch (error) {
@@ -93,13 +108,38 @@ const PayLaterOrders = () => {
     return selected ? [selected, ...remaining] : orders;
   }, [orders, selectedOrderId]);
 
+  const approvedPaymentPendingOrders = useMemo(
+    () =>
+      sortedOrders.filter((order) => {
+        const approved = String(order.creditApprovalStatus || "").toUpperCase() === "APPROVED";
+        const rejected = String(order.status || "").toUpperCase() === "REJECTED";
+        return approved && !rejected && !isPaid(order);
+      }),
+    [sortedOrders],
+  );
+
+  const completedOrders = useMemo(
+    () => sortedOrders.filter((order) => isPaid(order)),
+    [sortedOrders],
+  );
+
+  const rejectedOrders = useMemo(
+    () =>
+      sortedOrders.filter((order) => {
+        const rejectedStatus = String(order.status || "").toUpperCase() === "REJECTED";
+        const rejectedCredit = String(order.creditApprovalStatus || "").toUpperCase() === "REJECTED";
+        return rejectedStatus || rejectedCredit;
+      }),
+    [sortedOrders],
+  );
+
   return (
     <div className="min-h-screen bg-gray-100">
       <main className="max-w-6xl mx-auto px-6 pt-28 pb-10 space-y-6">
         <section className="bg-white rounded-2xl shadow-md p-6">
           <h1 className="text-2xl font-bold text-gray-900">Pay Later Orders</h1>
           <p className="text-sm text-gray-600 mt-1">
-            View credit request approval, due date, and admin decision.
+            Approved orders stay payment pending until online payment succeeds.
           </p>
         </section>
 
@@ -117,20 +157,21 @@ const PayLaterOrders = () => {
             </div>
           )}
 
-          {sortedOrders.map((order) => {
+          {approvedPaymentPendingOrders.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-md p-4">
+              <h2 className="text-lg font-semibold text-gray-900">Approved Orders (Payment Pending)</h2>
+            </div>
+          )}
+
+          {approvedPaymentPendingOrders.map((order) => {
             const creditStatus = labelize(order.creditApprovalStatus);
             const orderStatus = labelize(order.orderWorkflowStatus || order.status);
-            const rejected = String(order.creditApprovalStatus || "").toUpperCase() === "REJECTED";
             const approved = String(order.creditApprovalStatus || "").toUpperCase() === "APPROVED";
-            const completedWorkflow = String(order.orderWorkflowStatus || "").toUpperCase() === "COMPLETED";
             const dueDateReached = isDueDateReached(order.creditDueDate);
             const dueSoon = isDueSoon(order.creditDueDate);
             const paid = isPaid(order);
             const paymentPending = !paid;
-            const shouldShowPayNow = paymentPending && !completedWorkflow && (rejected || dueDateReached);
             const showDueSoonWarning = paymentPending && !dueDateReached && dueSoon && approved;
-            const canTrack = approved && ["APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED"].includes(String(order.status || "").toUpperCase());
-            const completed = String(order.status || "").toUpperCase() === "DELIVERED";
 
             return (
               <div key={order.orderId} className="bg-white rounded-2xl shadow-md p-6">
@@ -141,7 +182,7 @@ const PayLaterOrders = () => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">{orderStatus}</span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${rejected ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
                       Credit {creditStatus}
                     </span>
                   </div>
@@ -180,77 +221,20 @@ const PayLaterOrders = () => {
                   </div>
                 )}
 
-                {shouldShowPayNow && (
-                  <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-red-700">
-                      {rejected
-                        ? "Admin rejected your credit request. Complete your payment to place order."
-                        : "Credit due date has been reached. Please complete payment now."}
+                {paymentPending && (
+                  <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-sky-700">
+                      Approved - Payment Pending. Complete payment from the Order Approval Status page.
                     </p>
                     <button
                       type="button"
                       onClick={() =>
-                        navigate("/checkout-payment", {
-                          state: {
-                            existingOrderId: order.orderId,
-                            existingOrderLabel: `${order.orderId} - ${order.grade}`,
-                            existingAmount: Number(order.totalPrice || 0),
-                            existingAddress: order.address,
-                            existingDeliveryDate: order.creditDueDate,
-                            successMessage: "Credit rejected by admin. Complete payment for this order.",
-                          },
-                        })
+                        navigate(`/order-approval-status/${encodeURIComponent(order.orderId)}`)
                       }
-                      className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold"
+                      className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold"
                     >
-                      Checkout Payment
+                      Open Approval Status
                     </button>
-                  </div>
-                )}
-
-                {(canTrack || completed) && (
-                  <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-emerald-700">
-                      {completed
-                        ? "Order completed successfully. Open the completion page."
-                        : "Credit and order approval are complete. You can track this order now."}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {canTrack && !completed && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate("/delivery-tracking", {
-                              state: { selectedOrderId: order.orderId },
-                            })
-                          }
-                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold"
-                        >
-                          Track Order
-                        </button>
-                      )}
-                      {completed && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            navigate("/order-success", {
-                              state: {
-                                orderId: order.orderId,
-                                selectedOrderId: order.orderId,
-                                paymentId: "PAY_LATER_COMPLETED",
-                                title: "Order Completed",
-                                subtitle: "Your approved pay later order has been delivered successfully.",
-                                orderStatusLabel: "Completed",
-                                hideBillingButton: false,
-                              },
-                            })
-                          }
-                          className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold"
-                        >
-                          View Completion
-                        </button>
-                      )}
-                    </div>
                   </div>
                 )}
 
@@ -266,6 +250,59 @@ const PayLaterOrders = () => {
               </div>
             );
           })}
+
+          {completedOrders.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-md p-4 mt-6">
+              <h2 className="text-lg font-semibold text-gray-900">Completed Orders (Payment Successful)</h2>
+            </div>
+          )}
+
+          {completedOrders.map((order) => (
+            <div key={`completed-${order.orderId}`} className="bg-white rounded-2xl shadow-md p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">{order.orderId}</h2>
+                  <p className="text-sm text-gray-600">{order.grade} | {order.quantity} m3</p>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                  Order Confirmed / Payment Successful
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 text-sm text-gray-700">
+                <p><span className="font-semibold">Order Value:</span> Rs.{Number(order.totalPrice || 0).toFixed(2)}</p>
+                <p><span className="font-semibold">Payment Received:</span> {formatValue(order.paymentReceivedAt)}</p>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/pay-later-orders/${encodeURIComponent(order.orderId)}`)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold"
+                >
+                  View Full Order Details
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {rejectedOrders.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-md p-4 mt-6">
+              <h2 className="text-lg font-semibold text-gray-900">Rejected Orders</h2>
+            </div>
+          )}
+
+          {rejectedOrders.map((order) => (
+            <div key={`rejected-${order.orderId}`} className="bg-white rounded-2xl shadow-md p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">{order.orderId}</h2>
+                  <p className="text-sm text-gray-600">{order.grade} | {order.quantity} m3</p>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">Rejected</span>
+              </div>
+            </div>
+          ))}
         </section>
       </main>
     </div>

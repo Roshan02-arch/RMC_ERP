@@ -55,6 +55,10 @@ type StatusOrder = {
   orderWorkflowStatus?: string;
   status: string;
   createdAt?: string;
+  address?: string;
+  creditApprovalStatus?: string;
+  creditDueDate?: string;
+  paymentReceivedAt?: string;
 };
 
 type OrderListItem = {
@@ -97,6 +101,18 @@ const calculateTotalAmount = (value: number) => {
 
 const labelFromStatus = (status: string) =>
   String(status || "").trim().toUpperCase().replaceAll("_", " ");
+
+const isPayLaterPaid = (order: StatusOrder | null) => {
+  if (!order) return false;
+  const workflow = String(order.orderWorkflowStatus || "").trim().toUpperCase();
+  return (
+    !!order.paymentReceivedAt ||
+    String(order.paymentStatus || "").trim().toUpperCase() === "PAID" ||
+    workflow.includes("PAYMENT_SUCCESSFUL") ||
+    workflow.includes("ORDER_CONFIRMED") ||
+    workflow === "COMPLETED"
+  );
+};
 
 const OrderApprovalStatus = () => {
   const navigate = useNavigate();
@@ -152,9 +168,16 @@ const OrderApprovalStatus = () => {
               .filter((o) => {
                 const payOpt = String(o.paymentOption || o.paymentType || "").toUpperCase();
                 const st = String(o.status || "").toUpperCase();
+                const workflow = String(o.orderWorkflowStatus || "").toUpperCase();
                 return (
-                  (payOpt === "ONLINE" || payOpt === "CASH_ON_DELIVERY") &&
-                  (st === "PENDING_APPROVAL" || st === "APPROVED" || st === "REJECTED")
+                  (payOpt === "ONLINE" || payOpt === "PAY_LATER") &&
+                  (
+                    st === "PENDING_APPROVAL" ||
+                    st === "APPROVED" ||
+                    st === "REJECTED" ||
+                    workflow === "APPROVED_PAYMENT_PENDING" ||
+                    workflow === "ORDER_CONFIRMED_PAYMENT_SUCCESSFUL"
+                  )
                 );
               })
               .sort((a, b) => {
@@ -171,6 +194,7 @@ const OrderApprovalStatus = () => {
                 paymentType: String(o.paymentType || ""),
                 status: String(o.status || ""),
                 createdAt: String(o.createdAt || ""),
+                orderWorkflowStatus: String(o.orderWorkflowStatus || ""),
               }))
               .filter((o) => o.orderId);
 
@@ -221,6 +245,10 @@ const OrderApprovalStatus = () => {
             orderWorkflowStatus: String(fallback.data.orderWorkflowStatus || ""),
             status: String(fallback.data.status || "PENDING_APPROVAL"),
             createdAt: String(fallback.data.createdAt || ""),
+            address: String(fallback.data.address || ""),
+            creditApprovalStatus: String(fallback.data.creditApprovalStatus || ""),
+            creditDueDate: String(fallback.data.creditDueDate || ""),
+            paymentReceivedAt: String(fallback.data.paymentReceivedAt || ""),
           };
           setOrder(mapped);
         }
@@ -258,10 +286,12 @@ const OrderApprovalStatus = () => {
   const currentStatus = String(order?.status || "").trim().toUpperCase();
   const paymentMethod = String(order?.paymentMethod || "").trim().toUpperCase();
   const paymentStatus = String(order?.paymentStatus || "").trim().toUpperCase();
+  const creditApprovalStatus = String(order?.creditApprovalStatus || "").trim().toUpperCase();
   const totalAmount = calculateTotalAmount(Number(order?.totalPrice || 0));
   const isOnlinePayment = paymentMethod === "ONLINE";
-  const isCodPayment = paymentMethod === "CASH_ON_DELIVERY";
+  const isPayLaterPayment = paymentMethod === "PAY_LATER" || String(order?.paymentType || "").trim().toUpperCase() === "PAY_LATER";
   const shouldShowPayOnline = currentStatus === "APPROVED" && isOnlinePayment && paymentStatus !== "PAID";
+  const shouldShowPayNowForPayLater = currentStatus === "APPROVED" && isPayLaterPayment && creditApprovalStatus === "APPROVED" && !isPayLaterPaid(order);
   const shouldShowTrackOrder = currentStatus === "APPROVED" && (!isOnlinePayment || paymentStatus === "PAID");
   const badgeClass = badgeClassByStatus[currentStatus] || "bg-slate-100 text-slate-700 border-slate-200";
 
@@ -271,8 +301,8 @@ const OrderApprovalStatus = () => {
     title = "Order Approved";
     if (shouldShowPayOnline) {
       message = "Your order has been approved successfully. Please complete payment to place the order.";
-    } else if (isCodPayment) {
-      message = "Your order has been approved and will be delivered.";
+    } else if (shouldShowPayNowForPayLater) {
+      message = "Approved - Payment Pending. Please complete online payment to confirm the order.";
     } else {
       message = "Payment successful. Your order has been placed.";
     }
@@ -359,6 +389,26 @@ const OrderApprovalStatus = () => {
                     className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
                   >
                     Complete Payment
+                  </button>
+                )}
+
+                {shouldShowPayNowForPayLater && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate("/checkout-payment", {
+                        state: {
+                          existingOrderId: order.orderId,
+                          existingOrderLabel: `${order.orderId} - ${order.grade}`,
+                          existingAmount: Number(order.totalPrice || 0),
+                          existingAddress: order.address,
+                          existingDeliveryDate: order.creditDueDate,
+                        },
+                      })
+                    }
+                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
+                  >
+                    Pay Now
                   </button>
                 )}
 
