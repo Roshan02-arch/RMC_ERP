@@ -399,11 +399,9 @@ const PurchaseProduct = () => {
           <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_55%,#38bdf8_100%)] p-8 text-white shadow-[0_28px_70px_rgba(15,23,42,0.22)] sm:p-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
-                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-100/90">Smart Ordering Desk</p>
-                <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Purchase concrete and raw materials with confidence</h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-50/90 sm:text-base">
-                  Explore available stock, add items to your cart, manage reminders, and keep track of recent orders from one clean workspace.
-                </p>
+
+                <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Smart Ordering Desk</h1>
+
               </div>
 
               <div className="flex flex-wrap gap-3">
