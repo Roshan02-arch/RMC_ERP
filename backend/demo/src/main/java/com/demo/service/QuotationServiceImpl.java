@@ -132,6 +132,8 @@ public class QuotationServiceImpl implements QuotationService {
         response.setGstNo(quotation.getGstNo());
         response.setSiteName(quotation.getSiteName());
         response.setContactPerson(quotation.getContactPerson());
+        response.setCreatedAt(quotation.getCreatedAt());
+        response.setUpdatedAt(quotation.getUpdatedAt());
 
         List<QuotationItemResponse> items = new ArrayList<>();
         for (QuotationItem item : quotation.getItems()) {
