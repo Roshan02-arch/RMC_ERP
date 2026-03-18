@@ -290,9 +290,9 @@ public class OrderController {
                 paymentOption = "ONLINE";
             }
 
-            if (!"ONLINE".equals(paymentOption) && !"PAY_LATER".equals(paymentOption)) {
+            if (!"ONLINE".equals(paymentOption) && !"PAY_LATER".equals(paymentOption) && !"CASH_ON_DELIVERY".equals(paymentOption)) {
                 return ResponseEntity.badRequest().body(Map.of(
-                        "message", "Only ONLINE and PAY_LATER payment options are supported"
+                        "message", "Only ONLINE, PAY_LATER, and CASH_ON_DELIVERY payment options are supported"
                 ));
             }
 

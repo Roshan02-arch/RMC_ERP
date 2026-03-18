@@ -170,7 +170,7 @@ const OrderApprovalStatus = () => {
                 const st = String(o.status || "").toUpperCase();
                 const workflow = String(o.orderWorkflowStatus || "").toUpperCase();
                 return (
-                  (payOpt === "ONLINE" || payOpt === "PAY_LATER") &&
+                  (payOpt === "ONLINE" || payOpt === "PAY_LATER" || payOpt === "CASH_ON_DELIVERY") &&
                   (
                     st === "PENDING_APPROVAL" ||
                     st === "APPROVED" ||
@@ -286,12 +286,11 @@ const OrderApprovalStatus = () => {
   const currentStatus = String(order?.status || "").trim().toUpperCase();
   const paymentMethod = String(order?.paymentMethod || "").trim().toUpperCase();
   const paymentStatus = String(order?.paymentStatus || "").trim().toUpperCase();
-  const creditApprovalStatus = String(order?.creditApprovalStatus || "").trim().toUpperCase();
   const totalAmount = calculateTotalAmount(Number(order?.totalPrice || 0));
   const isOnlinePayment = paymentMethod === "ONLINE";
   const isPayLaterPayment = paymentMethod === "PAY_LATER" || String(order?.paymentType || "").trim().toUpperCase() === "PAY_LATER";
-  const shouldShowPayOnline = currentStatus === "APPROVED" && isOnlinePayment && paymentStatus !== "PAID";
-  const shouldShowPayNowForPayLater = currentStatus === "APPROVED" && isPayLaterPayment && creditApprovalStatus === "APPROVED" && !isPayLaterPaid(order);
+  const isCashOnDeliveryPayment = paymentMethod === "CASH_ON_DELIVERY";
+  const shouldShowPayNow = currentStatus === "APPROVED" && isOnlinePayment && paymentStatus !== "PAID";
   const shouldShowTrackOrder = currentStatus === "APPROVED" && (!isOnlinePayment || paymentStatus === "PAID");
   const badgeClass = badgeClassByStatus[currentStatus] || "bg-slate-100 text-slate-700 border-slate-200";
 
@@ -299,18 +298,27 @@ const OrderApprovalStatus = () => {
   let message = "Your order has been placed successfully and is waiting for admin approval.";
   if (currentStatus === "APPROVED") {
     title = "Order Approved";
-    if (shouldShowPayOnline) {
+    if (shouldShowPayNow) {
       message = "Your order has been approved successfully. Please complete payment to place the order.";
-    } else if (shouldShowPayNowForPayLater) {
-      message = "Approved - Payment Pending. Please complete online payment to confirm the order.";
+    } else if (isPayLaterPayment) {
+      message = "Your Pay Later order has been approved and placed successfully.";
+    } else if (isCashOnDeliveryPayment) {
+      message = "Your Cash on Delivery order has been approved and placed successfully.";
     } else {
-      message = "Payment successful. Your order has been placed.";
+      message = "Your order has been approved and placed successfully.";
     }
   } else if (currentStatus === "REJECTED") {
     title = "Order Rejected";
     message = "Admin rejected your order. Please place a new order.";
   } else if (currentStatus === "PENDING_APPROVAL") {
     title = "Order Pending Approval";
+    if (isPayLaterPayment) {
+      message = "Your Pay Later order is pending admin approval. It will be placed directly after approval.";
+    } else if (isCashOnDeliveryPayment) {
+      message = "Your Cash on Delivery order is pending admin approval. It will be placed directly after approval.";
+    } else {
+      message = "Your order is pending admin approval. Pay Now will be enabled after approval.";
+    }
   }
 
   const attemptLabels = buildAttemptLabels(history);
@@ -382,30 +390,10 @@ const OrderApprovalStatus = () => {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
-                {shouldShowPayOnline && (
+                {shouldShowPayNow && (
                   <button
                     type="button"
                     onClick={() => navigate(`/checkout-payment?orderId=${encodeURIComponent(order.orderId)}`)}
-                    className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
-                  >
-                    Complete Payment
-                  </button>
-                )}
-
-                {shouldShowPayNowForPayLater && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate("/checkout-payment", {
-                        state: {
-                          existingOrderId: order.orderId,
-                          existingOrderLabel: `${order.orderId} - ${order.grade}`,
-                          existingAmount: Number(order.totalPrice || 0),
-                          existingAddress: order.address,
-                          existingDeliveryDate: order.creditDueDate,
-                        },
-                      })
-                    }
                     className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
                   >
                     Pay Now

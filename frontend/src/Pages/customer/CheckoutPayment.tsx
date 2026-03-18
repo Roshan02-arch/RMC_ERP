@@ -594,7 +594,11 @@ const CheckoutPayment = () => {
     persistCart(cart.map((item) => (item.key === key ? { ...item, quantity: qty } : item)));
   };
 
-  const createConcreteOrder = async (item: CartItem, userId: string, paymentOption: "ONLINE" | "CASH_ON_DELIVERY") => {
+  const createConcreteOrder = async (
+    item: CartItem,
+    userId: string,
+    paymentOption: "ONLINE" | "CASH_ON_DELIVERY" | "PAY_LATER",
+  ) => {
     const response = await fetch(`${API_BASE_URL}/api/orders/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -606,6 +610,7 @@ const CheckoutPayment = () => {
         address,
         totalPrice: item.pricePerUnit * item.quantity,
         paymentOption,
+        creditDays: paymentOption === "PAY_LATER" ? creditDays : undefined,
       }),
     });
     const data = await parseApiResponse(response);
@@ -724,11 +729,6 @@ const CheckoutPayment = () => {
       return;
     }
 
-    if (method !== "ONLINE") {
-      setError("Only online payment is allowed.");
-      return;
-    }
-
     try {
       setLoading(true);
       const createdOrderIds: string[] = [];
@@ -757,16 +757,10 @@ const CheckoutPayment = () => {
         throw new Error("No payable amount found for this order.");
       }
 
-      paymentId = await openRazorpayCheckout(totalAmount);
-
       for (const item of concreteItems) {
-        const created = await createConcreteOrder(item, userId, method === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : "ONLINE");
+        const paymentOption = method === "PAY_LATER" ? "PAY_LATER" : method === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : "ONLINE";
+        const created = await createConcreteOrder(item, userId, paymentOption);
         createdOrderIds.push(created.orderId);
-
-        const orderSubtotal = item.pricePerUnit * item.quantity;
-        const orderTax = (orderSubtotal * GST_RATE) / 100;
-        const orderTotal = orderSubtotal + orderTax;
-        await recordPayment(created.orderId, orderTotal, `ONLINE|RAZORPAY:${paymentId}`);
       }
 
       for (const item of materialItems) {
@@ -777,8 +771,13 @@ const CheckoutPayment = () => {
       }
 
       localStorage.removeItem(CART_KEY);
-      playPaymentSuccessSound();
-      toast.success("Payment successful. Your order has been placed and is waiting for admin approval.");
+      if (method === "ONLINE") {
+        toast.success("Order placed successfully. It is pending admin approval. Complete payment after approval.");
+      } else if (method === "CASH_ON_DELIVERY") {
+        toast.success("Order placed successfully. It is pending admin approval.");
+      } else {
+        toast.success("Order placed successfully. It is pending admin approval.");
+      }
       const firstConcreteOrderId = createdOrderIds[0] || "";
       const firstRawOrderId = createdRawOrderIds[0] || 0;
 
@@ -791,7 +790,7 @@ const CheckoutPayment = () => {
       navigate("/order-success", {
         state: {
           orderId: firstConcreteOrderId || (firstRawOrderId ? `RMO-${firstRawOrderId}` : "ORDER-SUCCESS"),
-          paymentId: paymentId || "COD-REGISTERED",
+          paymentId: paymentId || (method === "PAY_LATER" ? "PAY-LATER-REQUESTED" : method === "CASH_ON_DELIVERY" ? "COD-REGISTERED" : "PENDING-APPROVAL"),
           selectedOrderId: firstConcreteOrderId,
           selectedRawOrderId: firstRawOrderId || undefined,
         },
@@ -878,8 +877,8 @@ const CheckoutPayment = () => {
                 setMethod={setMethod}
                 creditDays={creditDays}
                 setCreditDays={setCreditDays}
-                allowPayLater={false}
-                allowCashOnDelivery={false}
+                allowPayLater={!isExistingOrderPayment}
+                allowCashOnDelivery={!isExistingOrderPayment}
               />
             </div>
 

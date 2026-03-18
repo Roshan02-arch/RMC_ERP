@@ -4,6 +4,7 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
+    "socket.io": "^4.8.3",
     "three": "^0.183.2"
   }
 }
