@@ -76,6 +76,14 @@ const Notifications = () => {
       console.error("Failed to mark notification as read", error);
     }
 
+    const isQuotationNotification = row.type.includes("QUOTATION") || row.orderId.toUpperCase().startsWith("QREQ-") || row.orderId.toUpperCase().startsWith("QTN-");
+
+    if (isQuotationNotification) {
+      const ref = encodeURIComponent(row.orderId || "");
+      navigate(`/quotation?tab=my${ref ? `&ref=${ref}` : ""}`);
+      return;
+    }
+
     if (row.orderId) {
       navigate("/delivery-tracking", { state: { selectedOrderId: row.orderId } });
     }

@@ -6,6 +6,7 @@ public class QuotationItemRequest {
     private String grade;
     private double quantity;
     private double unitPrice;
+    private String requirementNote;
 
     public Long getId() {
         return id;
@@ -45,5 +46,13 @@ public class QuotationItemRequest {
 
     public void setUnitPrice(double unitPrice) {
         this.unitPrice = unitPrice;
+    }
+
+    public String getRequirementNote() {
+        return requirementNote;
+    }
+
+    public void setRequirementNote(String requirementNote) {
+        this.requirementNote = requirementNote;
     }
 }

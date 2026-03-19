@@ -37,10 +37,16 @@ const POLL_INTERVAL_MS = 15000;
 const TOAST_AUTO_CLOSE_MS = 4500;
 
 const toToastVariant = (type: NotificationType): ToastVariant => {
-  if (type === "ORDER_APPROVED" || type === "ORDER_DELIVERED") {
+  if (
+    type === "ORDER_APPROVED"
+    || type === "ORDER_DELIVERED"
+    || type === "QUOTATION_REQUEST_APPROVED"
+    || type === "QUOTATION_SENT"
+    || type === "QUOTATION_RESPONSE_ACCEPTED"
+  ) {
     return "success";
   }
-  if (type === "ORDER_RETURNED") {
+  if (type === "ORDER_RETURNED" || type === "QUOTATION_RESPONSE_REJECTED") {
     return "warning";
   }
   return "info";

@@ -166,10 +166,49 @@ public class OrderNotificationService {
         orderNotificationRepository.save(notification);
     }
 
+    public void createNotificationForUser(Long userId, String referenceId, NotificationType type, String message) {
+        if (userId == null || userId <= 0 || type == null) {
+            return;
+        }
+
+        NotificationType persistedType = toPersistedType(type);
+        String orderId = referenceId == null ? "" : referenceId.trim();
+        String title = getTitle(type);
+        String body = isBlank(message) ? getDefaultMessage(type) : message.trim();
+
+        OrderNotification latestOfSameType = orderNotificationRepository
+                .findTopByUserIdAndOrderIdAndTypeOrderByCreatedAtDesc(userId, orderId, persistedType)
+                .orElse(null);
+
+        if (latestOfSameType != null
+                && Objects.equals(normalize(latestOfSameType.getMessage()), normalize(body))
+                && latestOfSameType.getCreatedAt() != null
+                && latestOfSameType.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(2))) {
+            return;
+        }
+
+        OrderNotification notification = new OrderNotification();
+        notification.setUserId(userId);
+        notification.setOrderId(orderId);
+        notification.setTitle(title);
+        notification.setMessage(body);
+        notification.setType(persistedType);
+        notification.setRead(false);
+        notification.setCreatedAt(LocalDateTime.now());
+        orderNotificationRepository.save(notification);
+    }
+
     private NotificationType toPersistedType(NotificationType type) {
         return switch (type) {
-            case PAY_LATER_REQUESTED, CREDIT_REJECTED -> NotificationType.DELIVERY_STATUS_UPDATED;
-            case CREDIT_APPROVED -> NotificationType.ORDER_APPROVED;
+            case PAY_LATER_REQUESTED,
+                 CREDIT_REJECTED,
+                 NEW_QUOTATION_REQUEST,
+                 QUOTATION_REQUEST_SENT,
+                 QUOTATION_SENT,
+                 QUOTATION_RESPONSE_REJECTED -> NotificationType.DELIVERY_STATUS_UPDATED;
+            case CREDIT_APPROVED,
+                 QUOTATION_REQUEST_APPROVED,
+                 QUOTATION_RESPONSE_ACCEPTED -> NotificationType.ORDER_APPROVED;
             default -> type;
         };
     }
@@ -319,6 +358,12 @@ public class OrderNotificationService {
             case CREDIT_APPROVED -> "Credit Approved";
             case CREDIT_REJECTED -> "Credit Rejected";
             case PAY_LATER_REMINDER -> "Pay Later Reminder";
+            case NEW_QUOTATION_REQUEST -> "New Quotation Request";
+            case QUOTATION_REQUEST_SENT -> "Quotation Request Sent";
+            case QUOTATION_REQUEST_APPROVED -> "Quotation Request Approved";
+            case QUOTATION_SENT -> "Quotation Sent";
+            case QUOTATION_RESPONSE_ACCEPTED -> "Quotation Accepted";
+            case QUOTATION_RESPONSE_REJECTED -> "Quotation Rejected";
             case ORDER_APPROVED -> "Order Approved";
             case IN_PRODUCTION -> "In Production";
             case DISPATCH_SCHEDULED -> "Dispatch Scheduled";
@@ -335,6 +380,12 @@ public class OrderNotificationService {
             case CREDIT_APPROVED -> "Credit approved. Please pay before due date.";
             case CREDIT_REJECTED -> "Credit request rejected. Please complete payment to process your order.";
             case PAY_LATER_REMINDER -> "Reminder: Pay Later payment is pending.";
+            case NEW_QUOTATION_REQUEST -> "A new quotation request has been received.";
+            case QUOTATION_REQUEST_SENT -> "Quotation request sent successfully.";
+            case QUOTATION_REQUEST_APPROVED -> "Your quotation request has been approved.";
+            case QUOTATION_SENT -> "New quotation has been sent to you.";
+            case QUOTATION_RESPONSE_ACCEPTED -> "Customer accepted the quotation.";
+            case QUOTATION_RESPONSE_REJECTED -> "Quotation was rejected.";
             case ORDER_APPROVED -> "Your order has been approved.";
             case IN_PRODUCTION -> "Your order is now in production.";
             case DISPATCH_SCHEDULED -> "Your dispatch has been scheduled.";

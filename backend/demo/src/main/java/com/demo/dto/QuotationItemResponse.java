@@ -7,6 +7,7 @@ public class QuotationItemResponse {
     private double quantity;
     private double unitPrice;
     private double totalPrice;
+    private String requirementNote;
 
     public Long getId() {
         return id;
@@ -54,5 +55,13 @@ public class QuotationItemResponse {
 
     public void setTotalPrice(double totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    public String getRequirementNote() {
+        return requirementNote;
+    }
+
+    public void setRequirementNote(String requirementNote) {
+        this.requirementNote = requirementNote;
     }
 }

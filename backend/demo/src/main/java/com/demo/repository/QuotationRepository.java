@@ -8,5 +8,9 @@ import java.util.Optional;
 
 public interface QuotationRepository extends JpaRepository<Quotation, Long> {
     Optional<Quotation> findByQuotationNumber(String quotationNumber);
+    Optional<Quotation> findByRequestId(String requestId);
     List<Quotation> findAllByOrderByDateDescIdDesc();
+    List<Quotation> findByCustomerUserIdOrderByCreatedAtDesc(Long customerUserId);
+    List<Quotation> findByCustomerUserIdAndStatusInOrderByCreatedAtDesc(Long customerUserId, List<String> statuses);
+    List<Quotation> findByStatusInOrderByCreatedAtDesc(List<String> statuses);
 }

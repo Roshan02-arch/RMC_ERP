@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,6 +42,11 @@ public class QuotationController {
         return ResponseEntity.ok(quotationService.list());
     }
 
+    @GetMapping("/requests")
+    public ResponseEntity<?> listRequests() {
+        return ResponseEntity.ok(quotationService.listRequestsForAdmin());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Long id) {
         try {
@@ -61,6 +67,48 @@ public class QuotationController {
             String message = ex.getMessage() == null ? "Unable to update quotation" : ex.getMessage();
             int status = "Quotation not found".equals(message) ? 404 : 400;
             return ResponseEntity.status(status).body(Map.of("message", message));
+        }
+    }
+
+    @PutMapping("/requests/{id}/approve")
+    public ResponseEntity<?> approveRequest(@PathVariable Long id, @RequestParam Long adminUserId) {
+        try {
+            return ResponseEntity.ok(Map.of(
+                    "message", "Quotation request approved successfully",
+                    "data", quotationService.approveRequest(id, adminUserId)
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @PutMapping("/requests/{id}/reject")
+    public ResponseEntity<?> rejectRequest(@PathVariable Long id, @RequestBody Map<String, Object> payload) {
+        try {
+            Long adminUserId = Long.valueOf(String.valueOf(payload.getOrDefault("adminUserId", "0")));
+            String reason = String.valueOf(payload.getOrDefault("reason", "")).trim();
+            return ResponseEntity.ok(Map.of(
+                    "message", "Quotation request rejected successfully",
+                    "data", quotationService.rejectRequest(id, adminUserId, reason)
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @PutMapping("/send/{id}")
+    public ResponseEntity<?> sendQuotation(
+            @PathVariable Long id,
+            @RequestParam Long adminUserId,
+            @RequestBody QuotationRequest request
+    ) {
+        try {
+            return ResponseEntity.ok(Map.of(
+                    "message", "Quotation sent successfully",
+                    "data", quotationService.sendQuotation(id, adminUserId, request)
+            ));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         }
     }
 

@@ -17,9 +17,17 @@ type QuotationItem = {
 
 type QuotationRecord = {
   id: number;
+  requestId: string;
   quotationNumber: string;
+  customerUserId?: number;
   customerName: string;
   date: string;
+  status: string;
+  requestNotes: string;
+  termsAndConditions: string;
+  subTotalAmount: number;
+  taxAmount: number;
+  discountAmount: number;
   totalAmount: number;
   address: string;
   contact: string;
@@ -33,9 +41,15 @@ type QuotationRecord = {
 
 type QuotationForm = {
   id?: number;
+  requestId: string;
   quotationNumber: string;
   customerName: string;
   date: string;
+  status: string;
+  requestNotes: string;
+  termsAndConditions: string;
+  taxAmount: number;
+  discountAmount: number;
   address: string;
   contact: string;
   gstNo: string;
@@ -105,50 +119,80 @@ const normalizeNumber = (value: number) => {
   return value;
 };
 
+const normalizeProductKey = (value: string) => String(value || "").toUpperCase().replace(/[^A-Z0-9.]/g, "");
+
 const calculateItemTotal = (item: QuotationItem) => normalizeNumber(item.quantity) * normalizeNumber(item.unitPrice);
 
-const recalculateItems = (items: QuotationItem[]) =>
-  items.map((item) => ({
+const createResolveItemUnitPrice = (productPriceMap: Record<string, number>) => (item: Pick<QuotationItem, "quantity" | "unitPrice" | "totalPrice" | "productName" | "grade">) => {
+  const explicitUnitPrice = normalizeNumber(item.unitPrice);
+  if (explicitUnitPrice > 0) {
+    return explicitUnitPrice;
+  }
+
+  const quantity = normalizeNumber(item.quantity);
+  const totalPrice = normalizeNumber(item.totalPrice);
+  if (quantity > 0 && totalPrice > 0) {
+    return totalPrice / quantity;
+  }
+
+  const fallbackKey = item.productName || item.grade || "";
+  return Number(productPriceMap[normalizeProductKey(fallbackKey)] || 0);
+};
+
+const createRecalculateItems = (productPriceMap: Record<string, number>) => (items: QuotationItem[]) => {
+  const resolveItemUnitPrice = createResolveItemUnitPrice(productPriceMap);
+  return items.map((item) => ({
     ...item,
     quantity: normalizeNumber(item.quantity),
-    unitPrice: normalizeNumber(item.unitPrice),
-    totalPrice: calculateItemTotal(item),
+    unitPrice: resolveItemUnitPrice(item),
+    totalPrice: calculateItemTotal({ ...item, unitPrice: resolveItemUnitPrice(item) }),
   }));
+};
 
 const emptyForm = (): QuotationForm => ({
+  requestId: "",
   quotationNumber: generateQuotationNumber(),
   customerName: "",
   date: todayDate(),
+  status: "DRAFT",
+  requestNotes: "",
+  termsAndConditions: "",
+  taxAmount: 0,
+  discountAmount: 0,
   address: "",
   contact: "",
   gstNo: "",
   siteName: "",
   contactPerson: "",
-  items: recalculateItems(defaultItems()),
+  items: defaultItems(),
 });
 
 const mapRecordToForm = (record: QuotationRecord): QuotationForm => ({
   id: record.id,
+  requestId: record.requestId || "",
   quotationNumber: record.quotationNumber || "",
   customerName: record.customerName || "",
   date: record.date ? String(record.date).slice(0, 10) : todayDate(),
+  status: record.status || "DRAFT",
+  requestNotes: record.requestNotes || "",
+  termsAndConditions: record.termsAndConditions || "",
+  taxAmount: Number(record.taxAmount || 0),
+  discountAmount: Number(record.discountAmount || 0),
   address: record.address || "",
   contact: record.contact || "",
   gstNo: record.gstNo || "",
   siteName: record.siteName || "",
   contactPerson: record.contactPerson || "",
-  items: recalculateItems(
-    (record.items || []).map((item) => ({
-      id: item.id,
-      rowKey: makeRowKey(),
-      productName: item.productName || "",
-      grade: item.grade || "",
-      units: item.units || "Per Cum",
-      quantity: normalizeNumber(item.quantity),
-      unitPrice: normalizeNumber(item.unitPrice),
-      totalPrice: normalizeNumber(item.totalPrice),
-    })),
-  ),
+  items: (record.items || []).map((item) => ({
+    id: item.id,
+    rowKey: makeRowKey(),
+    productName: item.productName || "",
+    grade: item.grade || "",
+    units: item.units || "Per Cum",
+    quantity: normalizeNumber(item.quantity),
+    unitPrice: normalizeNumber(item.unitPrice),
+    totalPrice: normalizeNumber(item.totalPrice),
+  })),
 });
 
 const parseApiBody = async (response: Response) => {
@@ -342,6 +386,9 @@ const QuotationSheet = ({
   onItemChange,
   onAddRow,
   onDeleteRow,
+  formSubTotalAmount = 0,
+  formTaxAmount = 0,
+  formTotalAmount = 0,
 }: {
   form: QuotationForm;
   readOnly: boolean;
@@ -352,6 +399,9 @@ const QuotationSheet = ({
   onItemChange?: (rowKey: string, field: keyof QuotationItem, value: string | number) => void;
   onAddRow?: () => void;
   onDeleteRow?: (rowKey: string) => void;
+  formSubTotalAmount?: number;
+  formTaxAmount?: number;
+  formTotalAmount?: number;
 }) => {
   const renderInlineField = (
     field: keyof Omit<QuotationForm, "items" | "id">,
@@ -460,7 +510,9 @@ const QuotationSheet = ({
               <th className="border border-black px-2 py-2">Sr. No.</th>
               <th className="border border-black px-2 py-2">Grade of RMC</th>
               <th className="border border-black px-2 py-2">Unit</th>
+              <th className="border border-black px-2 py-2">Qty (Quantity)</th>
               <th className="border border-black px-2 py-2">Rate (₹)</th>
+              <th className="border border-black px-2 py-2">Total (₹)</th>
               <th className="border border-black px-2 py-2">Remark</th>
               {!readOnly && <th className="border border-black px-2 py-2">Action</th>}
             </tr>
@@ -492,9 +544,23 @@ const QuotationSheet = ({
                     />
                   )}
                 </td>
+                <td className="border border-black px-2 py-1 text-center">
+                  {readOnly ? (
+                    <span>{item.quantity}</span>
+                  ) : (
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={item.quantity}
+                      onChange={(event) => onItemChange?.(item.rowKey, "quantity", Number(event.target.value))}
+                      className="w-full px-2 py-1 text-center outline-none"
+                    />
+                  )}
+                </td>
                 <td className="border border-black px-2 py-1">
                   {readOnly ? (
-                    <span className="block text-center">{item.unitPrice.toFixed(0)}/-</span>
+                    <span className="block text-center">{item.unitPrice.toFixed(2)}/-</span>
                   ) : (
                     <input
                       type="number"
@@ -503,11 +569,13 @@ const QuotationSheet = ({
                       value={item.unitPrice}
                       onChange={(event) => {
                         onItemChange?.(item.rowKey, "unitPrice", Number(event.target.value));
-                        onItemChange?.(item.rowKey, "quantity", 1);
                       }}
                       className="w-full px-2 py-1 text-center outline-none"
                     />
                   )}
+                </td>
+                <td className="border border-black px-2 py-1 text-center font-semibold">
+                  {(item.quantity * item.unitPrice).toFixed(2)}
                 </td>
                 <td className="border border-black px-2 py-1 text-center">100% W.sand</td>
                 {!readOnly && (
@@ -525,6 +593,13 @@ const QuotationSheet = ({
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 ml-auto w-[360px] space-y-1 text-[12px]">
+        <p className="flex justify-between"><span className="font-semibold">Sub Total:</span><span className="font-semibold">{formSubTotalAmount.toFixed(2)}</span></p>
+        <p className="flex justify-between"><span className="font-semibold">GST (18%):</span><span className="font-semibold">{formTaxAmount.toFixed(2)}</span></p>
+        <p className="flex justify-between"><span className="font-semibold">Discount:</span><span className="font-semibold">{Number(form.discountAmount || 0).toFixed(2)}</span></p>
+        <p className="flex justify-between border-t-2 border-black pt-1 font-bold text-[13px]"><span>Total Amount:</span><span>{formTotalAmount.toFixed(2)}</span></p>
       </div>
 
       {!readOnly && (
@@ -620,6 +695,7 @@ const QuotationSheet = ({
 };
 
 const AdminQuotation = () => {
+  const [toast, setToast] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
   const [quotations, setQuotations] = useState<QuotationRecord[]>([]);
   const [mode, setMode] = useState<EditorMode>("none");
   const [form, setForm] = useState<QuotationForm>(emptyForm());
@@ -629,12 +705,42 @@ const AdminQuotation = () => {
   const [pdfPreviewRecord, setPdfPreviewRecord] = useState<QuotationRecord | null>(null);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [selectedCustomerKey, setSelectedCustomerKey] = useState<string>(NEW_CUSTOMER_KEY);
+  const [productPriceMap, setProductPriceMap] = useState<Record<string, number>>({});
   const visibleQuotationRef = useRef<HTMLDivElement | null>(null);
   const pdfRef = useRef<HTMLDivElement | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const adminUserId = Number(localStorage.getItem("userId") || 0);
+  const recalculateItems = useMemo(() => createRecalculateItems(productPriceMap), [productPriceMap]);
+
+  const showToast = (text: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ text, type });
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const formSubTotalAmount = useMemo(
+    () => recalculateItems(form.items).reduce((sum, item) => sum + item.totalPrice, 0),
+    [form.items, recalculateItems],
+  );
+
+  const formTaxAmount = useMemo(() => (formSubTotalAmount * 18) / 100, [formSubTotalAmount]);
 
   const formTotalAmount = useMemo(
-    () => recalculateItems(form.items).reduce((sum, item) => sum + item.totalPrice, 0),
-    [form.items],
+    () => Math.max(0, formSubTotalAmount + formTaxAmount - Number(form.discountAmount || 0)),
+    [form.discountAmount, formTaxAmount, formSubTotalAmount],
   );
 
   const parseRecord = (raw: unknown): QuotationRecord => {
@@ -643,9 +749,17 @@ const AdminQuotation = () => {
 
     return {
       id: Number(source.id || 0),
+      requestId: String(source.requestId || ""),
       quotationNumber: String(source.quotationNumber || ""),
+      customerUserId: Number(source.customerUserId || 0),
       customerName: String(source.customerName || ""),
       date: String(source.date || ""),
+      status: String(source.status || "DRAFT"),
+      requestNotes: String(source.requestNotes || ""),
+      termsAndConditions: String(source.termsAndConditions || ""),
+      subTotalAmount: Number(source.subTotalAmount || 0),
+      taxAmount: Number(source.taxAmount || 0),
+      discountAmount: Number(source.discountAmount || 0),
       totalAmount: Number(source.totalAmount || 0),
       address: String(source.address || ""),
       contact: String(source.contact || ""),
@@ -675,7 +789,7 @@ const AdminQuotation = () => {
   const fetchList = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/quotation/list`);
+      const response = await fetch(`${API_BASE_URL}/api/admin/quotation/requests`);
       const data = (await parseApiBody(response)) as unknown;
       if (!response.ok) {
         const maybeMessage = (data as { message?: string })?.message;
@@ -711,7 +825,9 @@ const AdminQuotation = () => {
       });
     } catch (error) {
       console.error(error);
-      setMessage(`Unable to load quotations. Ensure backend is running on ${API_BASE_URL}.`);
+      const msg = `Unable to load quotations. Ensure backend is running on ${API_BASE_URL}.`;
+      setMessage(msg);
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -719,6 +835,34 @@ const AdminQuotation = () => {
 
   useEffect(() => {
     void fetchList();
+  }, []);
+
+  const fetchProductPrices = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/admin/inventory/products`);
+      const data = (await parseApiBody(response)) as unknown;
+      if (!response.ok || !Array.isArray(data)) {
+        return;
+      }
+
+      const nextMap: Record<string, number> = {};
+      for (const row of data as unknown[]) {
+        const entry = row as Record<string, unknown>;
+        const productName = String(entry.name || "").trim();
+        const price = Number(entry.pricePerUnit || 0);
+        if (!productName) {
+          continue;
+        }
+        nextMap[normalizeProductKey(productName)] = Number.isFinite(price) ? price : 0;
+      }
+      setProductPriceMap(nextMap);
+    } catch {
+      // Keep UI working even if product prices fail to load.
+    }
+  };
+
+  useEffect(() => {
+    void fetchProductPrices();
   }, []);
 
   const loadCustomerOptions = async () => {
@@ -785,11 +929,191 @@ const AdminQuotation = () => {
     return parseRecord(data as unknown);
   };
 
+  const parseActionRecord = (payload: unknown): QuotationRecord | null => {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+    const row = payload as Record<string, unknown>;
+    if (!row.id) {
+      return null;
+    }
+    return parseRecord(payload);
+  };
+
   const startNewQuotation = () => {
     setMessage("");
     setMode("create");
-    setForm(emptyForm());
+    setForm({ ...emptyForm(), status: "DRAFT" });
     setSelectedCustomerKey(NEW_CUSTOMER_KEY);
+  };
+
+  const approveRequest = async (id: number) => {
+    if (!adminUserId) {
+      setMessage("Admin session expired. Please login again.");
+      showToast("Admin session expired. Please login again.", "error");
+      return;
+    }
+    try {
+      setLoading(true);
+      setMessage("");
+      const response = await fetch(`${API_BASE_URL}/api/admin/quotation/requests/${id}/approve?adminUserId=${encodeURIComponent(String(adminUserId))}`, {
+        method: "PUT",
+      });
+      const data = await parseApiBody(response);
+      if (!response.ok) {
+        const msg = String((data as { message?: string })?.message || "Unable to approve request");
+        setMessage(msg);
+        showToast(msg, "error");
+        return;
+      }
+      const approved = (data as { data?: unknown })?.data;
+      if (approved) {
+        const record = parseRecord(approved);
+        setForm(mapRecordToForm(record));
+        setSelectedCustomerKey(NEW_CUSTOMER_KEY);
+        setMode("edit");
+      }
+      setMessage("Quotation request approved. Create quotation and send to customer.");
+      showToast("Quotation request approved.", "success");
+      await fetchList();
+    } catch (error) {
+      console.error(error);
+      setMessage("Unable to approve request.");
+      showToast("Unable to approve request.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rejectRequest = async (id: number) => {
+    if (!adminUserId) {
+      setMessage("Admin session expired. Please login again.");
+      showToast("Admin session expired. Please login again.", "error");
+      return;
+    }
+
+    const reason = window.prompt("Enter rejection reason (optional):", "") || "";
+
+    try {
+      setLoading(true);
+      setMessage("");
+      const response = await fetch(`${API_BASE_URL}/api/admin/quotation/requests/${id}/reject`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminUserId, reason }),
+      });
+      const data = await parseApiBody(response);
+      if (!response.ok) {
+        const msg = String((data as { message?: string })?.message || "Unable to reject request");
+        setMessage(msg);
+        showToast(msg, "error");
+        return;
+      }
+      setMessage("Quotation request rejected.");
+      showToast("Quotation request rejected.", "success");
+      await fetchList();
+    } catch (error) {
+      console.error(error);
+      setMessage("Unable to reject request.");
+      showToast("Unable to reject request.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const upsertDraftQuotation = async (): Promise<QuotationRecord | null> => {
+    const endpoint = mode === "create" || !form.id
+      ? `${API_BASE_URL}/api/admin/quotation/create`
+      : `${API_BASE_URL}/api/admin/quotation/update/${form.id}`;
+
+    const response = await fetch(endpoint, {
+      method: mode === "create" || !form.id ? "POST" : "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...buildPayload(),
+        status: "DRAFT",
+      }),
+    });
+
+    const data = await parseApiBody(response);
+    if (!response.ok) {
+      throw new Error(String((data as { message?: string })?.message || "Unable to save quotation"));
+    }
+
+    const parsed = parseActionRecord((data as { data?: unknown })?.data ?? data);
+    if (parsed) {
+      setForm(mapRecordToForm(parsed));
+      setMode("edit");
+      return parsed;
+    }
+
+    if (form.id) {
+      const refreshed = await fetchById(form.id);
+      setForm(mapRecordToForm(refreshed));
+      setMode("edit");
+      return refreshed;
+    }
+
+    return null;
+  };
+
+  const sendQuotationNow = async () => {
+    if (!adminUserId) {
+      setMessage("Admin session expired. Please login again.");
+      showToast("Admin session expired. Please login again.", "error");
+      return;
+    }
+
+    if (!form.customerName.trim() || !form.quotationNumber.trim()) {
+      setMessage("Quotation Number and Customer Name are required.");
+      showToast("Quotation Number and Customer Name are required.", "error");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage("");
+
+      let targetId = form.id;
+      if (!targetId) {
+        const saved = await upsertDraftQuotation();
+        targetId = saved?.id;
+      }
+
+      if (!targetId) {
+        throw new Error("Unable to prepare quotation for sending. Please save once and try again.");
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/quotation/send/${targetId}?adminUserId=${encodeURIComponent(String(adminUserId))}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildPayload()),
+        },
+      );
+
+      const data = await parseApiBody(response);
+      if (!response.ok) {
+        const msg = String((data as { message?: string })?.message || "Unable to send quotation");
+        setMessage(msg);
+        showToast(msg, "error");
+        return;
+      }
+
+      setMessage("Quotation sent to customer successfully.");
+      showToast("Quotation sent to customer successfully.", "success");
+      setMode("none");
+      setForm(emptyForm());
+      await fetchList();
+    } catch (error) {
+      console.error(error);
+      const msg = error instanceof Error ? error.message : "Unable to send quotation.";
+      setMessage(msg);
+      showToast(msg, "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleView = async (id: number) => {
@@ -801,7 +1125,9 @@ const AdminQuotation = () => {
       setMode("view");
     } catch (error) {
       console.error(error);
-      setMessage(error instanceof Error ? error.message : "Unable to open quotation");
+      const msg = error instanceof Error ? error.message : "Unable to open quotation";
+      setMessage(msg);
+      showToast(msg, "error");
     }
   };
 
@@ -814,7 +1140,9 @@ const AdminQuotation = () => {
       setMode("edit");
     } catch (error) {
       console.error(error);
-      setMessage(error instanceof Error ? error.message : "Unable to edit quotation");
+      const msg = error instanceof Error ? error.message : "Unable to edit quotation";
+      setMessage(msg);
+      showToast(msg, "error");
     }
   };
 
@@ -831,10 +1159,13 @@ const AdminQuotation = () => {
       });
       const data = await parseApiBody(response);
       if (!response.ok) {
-        setMessage(String((data as { message?: string })?.message || "Unable to delete quotation"));
+        const msg = String((data as { message?: string })?.message || "Unable to delete quotation");
+        setMessage(msg);
+        showToast(msg, "error");
         return;
       }
       setMessage("Quotation deleted successfully.");
+      showToast("Quotation deleted successfully.", "success");
       await fetchList();
       if (form.id === id) {
         setMode("none");
@@ -842,6 +1173,7 @@ const AdminQuotation = () => {
     } catch (error) {
       console.error(error);
       setMessage("Unable to delete quotation.");
+      showToast("Unable to delete quotation.", "error");
     } finally {
       setDeletingId(null);
     }
@@ -850,6 +1182,10 @@ const AdminQuotation = () => {
   const updateField = (field: keyof Omit<QuotationForm, "items" | "id">, value: string) => {
     if (field === "customerName") {
       setSelectedCustomerKey(NEW_CUSTOMER_KEY);
+    }
+    if (field === "discountAmount") {
+      setForm((previous) => ({ ...previous, [field]: Number(value || 0) }));
+      return;
     }
     setForm((previous) => ({ ...previous, [field]: value }));
   };
@@ -912,15 +1248,23 @@ const AdminQuotation = () => {
   };
 
   const buildPayload = () => ({
+    requestId: form.requestId.trim(),
     quotationNumber: form.quotationNumber.trim(),
+    customerUserId: 0,
     customerName: form.customerName.trim(),
+    status: (form.status || "DRAFT").trim(),
     date: form.date,
     totalAmount: formTotalAmount,
+    subTotalAmount: formSubTotalAmount,
+    taxAmount: formTaxAmount,
+    discountAmount: Number(form.discountAmount || 0),
     address: form.address.trim(),
     contact: form.contact.trim(),
     gstNo: form.gstNo.trim(),
     siteName: form.siteName.trim(),
     contactPerson: form.contactPerson.trim(),
+    requestNotes: form.requestNotes.trim(),
+    termsAndConditions: form.termsAndConditions.trim(),
     items: recalculateItems(form.items).map((item) => ({
       id: item.id,
       productName: (item.productName || item.grade || "").trim(),
@@ -937,6 +1281,7 @@ const AdminQuotation = () => {
     }
     if (!form.quotationNumber.trim() || !form.customerName.trim()) {
       setMessage("Quotation Number and Customer Name are required.");
+      showToast("Quotation Number and Customer Name are required.", "error");
       return;
     }
 
@@ -944,30 +1289,17 @@ const AdminQuotation = () => {
       setLoading(true);
       setMessage("");
 
-      const endpoint =
-        mode === "create"
-          ? `${API_BASE_URL}/api/admin/quotation/create`
-          : `${API_BASE_URL}/api/admin/quotation/update/${form.id}`;
-
-      const response = await fetch(endpoint, {
-        method: mode === "create" ? "POST" : "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
-      });
-
-      const data = await parseApiBody(response);
-      if (!response.ok) {
-        setMessage(String((data as { message?: string })?.message || "Unable to save quotation"));
-        return;
-      }
-
-      setMessage(mode === "create" ? "Quotation created successfully." : "Quotation updated successfully.");
-      setMode("none");
-      setForm(emptyForm());
+      const prevMode = mode;
+      await upsertDraftQuotation();
+      const successMsg = prevMode === "create" ? "Quotation draft saved successfully." : "Quotation draft updated successfully.";
+      setMessage(successMsg);
+      showToast(successMsg, "success");
       await fetchList();
     } catch (error) {
       console.error(error);
-      setMessage("Unable to save quotation.");
+      const msg = error instanceof Error ? error.message : "Unable to save quotation.";
+      setMessage(msg);
+      showToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -1118,7 +1450,9 @@ const AdminQuotation = () => {
       await renderRecordToPdf(record);
     } catch (error) {
       console.error(error);
-      setMessage(error instanceof Error ? error.message : "Unable to download PDF");
+      const msg = error instanceof Error ? error.message : "Unable to download PDF";
+      setMessage(msg);
+      showToast(msg, "error");
     }
   };
 
@@ -1127,9 +1461,17 @@ const AdminQuotation = () => {
       setMessage("");
       const tempRecord: QuotationRecord = {
         id: Number(form.id || 0),
+        requestId: form.requestId,
         quotationNumber: form.quotationNumber || generateQuotationNumber(),
+        customerUserId: 0,
         customerName: form.customerName,
         date: form.date,
+        status: form.status,
+        requestNotes: form.requestNotes,
+        termsAndConditions: form.termsAndConditions,
+        subTotalAmount: formSubTotalAmount,
+        taxAmount: formTaxAmount,
+        discountAmount: Number(form.discountAmount || 0),
         totalAmount: formTotalAmount,
         address: form.address,
         contact: form.contact,
@@ -1141,9 +1483,29 @@ const AdminQuotation = () => {
       await renderRecordToPdf(tempRecord, visibleQuotationRef.current);
     } catch (error) {
       console.error(error);
-      setMessage(error instanceof Error ? error.message : "Unable to download PDF");
+      const msg = error instanceof Error ? error.message : "Unable to download PDF";
+      setMessage(msg);
+      showToast(msg, "error");
     }
   };
+
+  const pdfPreviewData = useMemo(() => {
+    if (!pdfPreviewRecord) {
+      return null;
+    }
+    const mapped = mapRecordToForm(pdfPreviewRecord);
+    const items = recalculateItems(mapped.items);
+    const subTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const taxAmount = (subTotal * 18) / 100;
+    const discountAmount = Number(mapped.discountAmount || 0);
+    const totalAmount = Math.max(0, subTotal + taxAmount - discountAmount);
+    return {
+      form: { ...mapped, items },
+      subTotal,
+      taxAmount,
+      totalAmount,
+    };
+  }, [pdfPreviewRecord, recalculateItems]);
 
   const readOnly = mode === "view";
   const showEditor = mode !== "none";
@@ -1165,32 +1527,54 @@ const AdminQuotation = () => {
         <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700">{message}</p>
       )}
 
+      {toast && (
+        <div
+          className={`fixed right-5 top-5 z-[9999] rounded-lg px-4 py-3 text-sm font-semibold text-white shadow-lg ${
+            toast.type === "success"
+              ? "bg-emerald-600"
+              : toast.type === "error"
+                ? "bg-rose-600"
+                : "bg-slate-700"
+          }`}
+        >
+          {toast.text}
+        </div>
+      )}
+
       <div className="mt-6">
-        <h3 className="mb-3 text-lg font-semibold text-gray-800">Saved Quotations List</h3>
+        <h3 className="mb-3 text-lg font-semibold text-gray-800">Quotation Requests & Quotations</h3>
         <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full text-left text-xs text-gray-700 sm:text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-600">
               <tr>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Quotation No.</th>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Customer</th>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Date</th>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Created</th>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Updated</th>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Amount</th>
-                <th className="px-2 py-2 sm:px-4 sm:py-3">Actions</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Request ID</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Quotation No.</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Customer</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Status</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Date</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Created</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Updated</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Amount</th>
+                <th className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {quotations.map((quotation) => (
                 <tr key={quotation.id}>
-                  <td className="px-2 py-2 font-medium text-gray-900 sm:px-4 sm:py-3">{quotation.quotationNumber}</td>
-                  <td className="px-2 py-2 sm:px-4 sm:py-3 truncate">{quotation.customerName}</td>
-                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-xs">{formatDate(quotation.date)}</td>
-                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-xs text-gray-500">{quotation.createdAt ? new Date(quotation.createdAt).toLocaleDateString("en-GB", { year: "2-digit", month: "short", day: "numeric" }) : "-"}</td>
-                  <td className="px-2 py-2 sm:px-4 sm:py-3 text-xs text-gray-500">{quotation.updatedAt ? new Date(quotation.updatedAt).toLocaleDateString("en-GB", { year: "2-digit", month: "short", day: "numeric" }) : "-"}</td>
-                  <td className="px-2 py-2 sm:px-4 sm:py-3 font-medium">{money(quotation.totalAmount)}</td>
+                  <td className="whitespace-nowrap px-2 py-2 font-medium text-gray-900 sm:px-4 sm:py-3">{quotation.requestId || "-"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 font-medium text-gray-900 sm:px-4 sm:py-3">{quotation.quotationNumber}</td>
+                  <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">{quotation.customerName}</td>
+                  <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3">
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+                      {String(quotation.status || "-").replaceAll("_", " ")}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-xs">{formatDate(quotation.date)}</td>
+                  <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-xs text-gray-500">{quotation.createdAt ? new Date(quotation.createdAt).toLocaleDateString("en-GB", { year: "2-digit", month: "short", day: "numeric" }) : "-"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 text-xs text-gray-500">{quotation.updatedAt ? new Date(quotation.updatedAt).toLocaleDateString("en-GB", { year: "2-digit", month: "short", day: "numeric" }) : "-"}</td>
+                  <td className="whitespace-nowrap px-2 py-2 sm:px-4 sm:py-3 font-medium">{money(quotation.totalAmount)}</td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3">
-                    <div className="flex flex-wrap gap-1 sm:gap-2">
+                    <div className="flex min-w-[280px] flex-wrap gap-1 sm:gap-2">
                       <button
                         type="button"
                         onClick={() => void handleView(quotation.id)}
@@ -1205,6 +1589,24 @@ const AdminQuotation = () => {
                       >
                         Edit
                       </button>
+                      {String(quotation.status || "").toUpperCase() === "PENDING" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void approveRequest(quotation.id)}
+                            className="rounded bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-500"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void rejectRequest(quotation.id)}
+                            className="rounded bg-rose-600 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-500"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         onClick={() => void handleDownload(quotation.id)}
@@ -1227,7 +1629,7 @@ const AdminQuotation = () => {
 
               {quotations.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                     No quotations saved yet.
                   </td>
                 </tr>
@@ -1253,6 +1655,15 @@ const AdminQuotation = () => {
                   Save Quotation
                 </button>
               )}
+              {mode !== "view" && (
+                <button
+                  type="button"
+                  onClick={() => void sendQuotationNow()}
+                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                >
+                  Send Quotation
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void handleDownloadCurrent()}
@@ -1273,6 +1684,49 @@ const AdminQuotation = () => {
             </div>
           </div>
 
+          <div className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 md:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">
+              GST (18%)
+              <input
+                type="number"
+                value={formTaxAmount.toFixed(2)}
+                readOnly
+                className="mt-1 w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700">
+              Discount Amount
+              <input
+                type="number"
+                value={form.discountAmount}
+                onChange={(event) => updateField("discountAmount", event.target.value)}
+                disabled={readOnly}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700 md:col-span-2">
+              Notes / Requirements
+              <textarea
+                rows={3}
+                value={form.requestNotes}
+                onChange={(event) => updateField("requestNotes", event.target.value)}
+                disabled={readOnly}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <label className="text-sm font-medium text-gray-700 md:col-span-2">
+              Terms and Conditions
+              <textarea
+                rows={3}
+                value={form.termsAndConditions}
+                onChange={(event) => updateField("termsAndConditions", event.target.value)}
+                disabled={readOnly}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+            </label>
+            <p className="text-sm font-semibold text-gray-800 md:col-span-2">Computed Total: {money(formTotalAmount)}</p>
+          </div>
+
           <div ref={visibleQuotationRef}>
             <QuotationSheet
               form={{ ...form, items: recalculateItems(form.items) }}
@@ -1284,15 +1738,24 @@ const AdminQuotation = () => {
               onItemChange={updateItem}
               onAddRow={addRow}
               onDeleteRow={deleteRow}
+              formSubTotalAmount={formSubTotalAmount}
+              formTaxAmount={formTaxAmount}
+              formTotalAmount={formTotalAmount}
             />
           </div>
         </div>
       )}
 
       <div className="fixed left-[-9999px] top-0 z-[-1] w-[794px] bg-white">
-        {pdfPreviewRecord && (
+        {pdfPreviewData && (
           <div ref={pdfRef}>
-            <QuotationSheet form={mapRecordToForm(pdfPreviewRecord)} readOnly />
+            <QuotationSheet
+              form={pdfPreviewData.form}
+              readOnly
+              formSubTotalAmount={pdfPreviewData.subTotal}
+              formTaxAmount={pdfPreviewData.taxAmount}
+              formTotalAmount={pdfPreviewData.totalAmount}
+            />
           </div>
         )}
       </div>

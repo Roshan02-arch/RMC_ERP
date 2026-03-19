@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  FiCalendar,
   FiChevronRight,
   FiCreditCard,
   FiMail,
@@ -63,9 +62,6 @@ type DeliveryAddressCardProps = {
   setEmail: (value: string) => void;
   address: string;
   setAddress: (value: string) => void;
-  deliveryDate: string;
-  setDeliveryDate: (value: string) => void;
-  disabledDeliveryDate: boolean;
 };
 
 type OrderDetailsCardProps = {
@@ -183,9 +179,6 @@ const DeliveryAddressCard = ({
   setEmail,
   address,
   setAddress,
-  deliveryDate,
-  setDeliveryDate,
-  disabledDeliveryDate,
 }: DeliveryAddressCardProps) => (
   <section className={cardShell}>
     <div className="flex items-center gap-3">
@@ -237,20 +230,6 @@ const DeliveryAddressCard = ({
         </div>
       </label>
 
-      <label className="space-y-2 md:col-span-2">
-        <span className="text-sm font-semibold text-slate-700">Preferred Delivery Date</span>
-        <div className="relative">
-          <FiCalendar className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="datetime-local"
-            className={`${inputClass} pl-11`}
-            value={deliveryDate}
-            onChange={(event) => setDeliveryDate(event.target.value)}
-            disabled={disabledDeliveryDate}
-            readOnly
-          />
-        </div>
-      </label>
     </div>
   </section>
 );
@@ -859,9 +838,6 @@ const CheckoutPayment = () => {
                 setEmail={setEmail}
                 address={address}
                 setAddress={setAddress}
-                deliveryDate={deliveryDate}
-                setDeliveryDate={setDeliveryDate}
-                disabledDeliveryDate={isExistingOrderPayment}
               />
 
               <OrderDetailsCard

@@ -28,6 +28,13 @@ public class Quotation {
     @Column(nullable = false, unique = true)
     private String quotationNumber;
 
+    @Column(unique = true)
+    private String requestId;
+
+    private Long customerUserId;
+
+    private String status;
+
     @Column(nullable = false)
     private String customerName;
 
@@ -40,6 +47,20 @@ public class Quotation {
     private String gstNo;
     private String siteName;
     private String contactPerson;
+
+    @Column(length = 2000)
+    private String requestNotes;
+
+    @Column(length = 4000)
+    private String termsAndConditions;
+
+    private double subTotalAmount;
+    private double taxAmount;
+    private double discountAmount;
+
+    private LocalDateTime approvedAt;
+    private LocalDateTime sentAt;
+    private LocalDateTime respondedAt;
 
     @OneToMany(mappedBy = "quotation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<QuotationItem> items = new ArrayList<>();
@@ -54,6 +75,9 @@ public class Quotation {
     public void onCreate() {
         if (date == null) {
             date = LocalDate.now();
+        }
+        if (status == null || status.isBlank()) {
+            status = "DRAFT";
         }
         LocalDateTime now = LocalDateTime.now();
         createdAt = now;
@@ -90,6 +114,30 @@ public class Quotation {
 
     public void setQuotationNumber(String quotationNumber) {
         this.quotationNumber = quotationNumber;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+
+    public Long getCustomerUserId() {
+        return customerUserId;
+    }
+
+    public void setCustomerUserId(Long customerUserId) {
+        this.customerUserId = customerUserId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public String getCustomerName() {
@@ -154,6 +202,70 @@ public class Quotation {
 
     public void setContactPerson(String contactPerson) {
         this.contactPerson = contactPerson;
+    }
+
+    public String getRequestNotes() {
+        return requestNotes;
+    }
+
+    public void setRequestNotes(String requestNotes) {
+        this.requestNotes = requestNotes;
+    }
+
+    public String getTermsAndConditions() {
+        return termsAndConditions;
+    }
+
+    public void setTermsAndConditions(String termsAndConditions) {
+        this.termsAndConditions = termsAndConditions;
+    }
+
+    public double getSubTotalAmount() {
+        return subTotalAmount;
+    }
+
+    public void setSubTotalAmount(double subTotalAmount) {
+        this.subTotalAmount = subTotalAmount;
+    }
+
+    public double getTaxAmount() {
+        return taxAmount;
+    }
+
+    public void setTaxAmount(double taxAmount) {
+        this.taxAmount = taxAmount;
+    }
+
+    public double getDiscountAmount() {
+        return discountAmount;
+    }
+
+    public void setDiscountAmount(double discountAmount) {
+        this.discountAmount = discountAmount;
+    }
+
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public LocalDateTime getSentAt() {
+        return sentAt;
+    }
+
+    public void setSentAt(LocalDateTime sentAt) {
+        this.sentAt = sentAt;
+    }
+
+    public LocalDateTime getRespondedAt() {
+        return respondedAt;
+    }
+
+    public void setRespondedAt(LocalDateTime respondedAt) {
+        this.respondedAt = respondedAt;
     }
 
     public List<QuotationItem> getItems() {
