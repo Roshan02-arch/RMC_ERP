@@ -101,6 +101,8 @@ const statusClass = (value: string) => {
   return "bg-slate-100 text-slate-700";
 };
 
+const canViewQuotationPdf = (value: string) => normalizeStatus(value) !== "PENDING";
+
 const parseResponseBody = async (response: Response) => {
   const raw = await response.text();
   if (!raw) {
@@ -318,7 +320,6 @@ const Quotation = () => {
   const [notes, setNotes] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingRows, setLoadingRows] = useState(false);
-  const [decisionLoading, setDecisionLoading] = useState<number | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -676,34 +677,6 @@ const Quotation = () => {
     setTab("request");
   };
 
-  const respondToQuotation = async (id: number, action: "ACCEPT" | "REJECT") => {
-    if (!userId) {
-      return;
-    }
-    setDecisionLoading(id);
-    setError("");
-    setMessage("");
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/quotation/${id}/decision?userId=${encodeURIComponent(String(userId))}&action=${action}`,
-        { method: "PUT" },
-      );
-      const data = await parseResponseBody(response);
-      if (!response.ok) {
-        throw new Error(String((data as { message?: string })?.message || "Unable to update quotation response"));
-      }
-      setMessage(action === "ACCEPT" ? "Quotation accepted successfully." : "Quotation rejected successfully.");
-      showToast(action === "ACCEPT" ? "Quotation accepted successfully." : "Quotation rejected successfully.", "success");
-      await fetchMyRows();
-    } catch (decisionError) {
-      const msg = decisionError instanceof Error ? decisionError.message : "Unable to update quotation response";
-      setError(msg);
-      showToast(msg, "error");
-    } finally {
-      setDecisionLoading(null);
-    }
-  };
-
   const markReviewed = async (quotationId: number) => {
     if (!userId) return;
     try {
@@ -837,6 +810,11 @@ const Quotation = () => {
   };
 
   const handleViewQuotation = async (row: QuotationRecord) => {
+    if (!canViewQuotationPdf(row.status)) {
+      showToast("Quotation PDF will be available after admin approval.", "info");
+      return;
+    }
+
     try {
       setSelectedRowId(row.id);
       if (normalizeStatus(row.status) === "QUOTATION_SENT") {
@@ -1081,14 +1059,16 @@ const Quotation = () => {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => void handleViewQuotation(row)}
-                              disabled={pdfLoading}
-                              className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
-                            >
-                              {pdfLoading ? "Opening PDF..." : "View Quotation"}
-                            </button>
+                            {canViewQuotationPdf(row.status) && (
+                              <button
+                                type="button"
+                                onClick={() => void handleViewQuotation(row)}
+                                disabled={pdfLoading}
+                                className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
+                              >
+                                {pdfLoading ? "Opening PDF..." : "View Quotation"}
+                              </button>
+                            )}
                             {normalizeStatus(row.status) === "PENDING" && (
                               <button
                                 type="button"
@@ -1155,16 +1135,18 @@ const Quotation = () => {
                   <p><span className="font-semibold text-gray-900">Total Amount:</span> {money(selectedGrandTotal)}</p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleViewQuotation(selectedRow)}
-                    disabled={pdfLoading}
-                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
-                  >
-                    {pdfLoading ? "Opening PDF..." : "Open Quotation PDF"}
-                  </button>
-                </div>
+                {canViewQuotationPdf(selectedRow.status) && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleViewQuotation(selectedRow)}
+                      disabled={pdfLoading}
+                      className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                    >
+                      {pdfLoading ? "Opening PDF..." : "Open Quotation PDF"}
+                    </button>
+                  </div>
+                )}
 
                 {selectedRow.requestNotes && (
                   <p className="text-sm text-gray-700"><span className="font-semibold text-gray-900">Request Notes:</span> {selectedRow.requestNotes}</p>
@@ -1173,26 +1155,6 @@ const Quotation = () => {
                   <p className="text-sm text-gray-700"><span className="font-semibold text-gray-900">Terms:</span> {selectedRow.termsAndConditions}</p>
                 )}
 
-                {(normalizeStatus(selectedRow.status) === "QUOTATION_SENT" || normalizeStatus(selectedRow.status) === "CUSTOMER_REVIEWED") && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void respondToQuotation(selectedRow.id, "ACCEPT")}
-                      disabled={decisionLoading === selectedRow.id}
-                      className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
-                    >
-                      {decisionLoading === selectedRow.id ? "Processing..." : "Accept Quotation"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void respondToQuotation(selectedRow.id, "REJECT")}
-                      disabled={decisionLoading === selectedRow.id}
-                      className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
-                    >
-                      {decisionLoading === selectedRow.id ? "Processing..." : "Reject Quotation"}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </section>
