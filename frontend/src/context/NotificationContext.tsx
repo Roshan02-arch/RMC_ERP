@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { API_BASE_URL } from "../api/api";
 import { normalizeRole } from "../utils/auth";
 import type { AppNotification, NotificationType, ToastVariant } from "../types/notification";
 
@@ -140,7 +141,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8080/api/notifications/my/${userId}?t=${Date.now()}`, {
+      const res = await fetch(`${API_BASE_URL}/api/notifications/my/${userId}?t=${Date.now()}`, {
         cache: "no-store",
       });
       if (!res.ok) {
@@ -203,7 +204,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const res = await fetch(
-      `http://localhost:8080/api/notifications/${notificationId}/read?userId=${encodeURIComponent(userId)}`,
+      `${API_BASE_URL}/api/notifications/${notificationId}/read?userId=${encodeURIComponent(userId)}`,
       {
         method: "PUT",
       }
@@ -226,7 +227,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const res = await fetch(`http://localhost:8080/api/notifications/my/${userId}/read-all`, {
+    const res = await fetch(`${API_BASE_URL}/api/notifications/my/${userId}/read-all`, {
       method: "PUT",
     });
 
@@ -246,7 +247,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     const current = notifications.find((notification) => notification.id === notificationId);
 
     let res = await fetch(
-      `http://localhost:8080/api/notifications/${notificationId}?userId=${encodeURIComponent(userId)}`,
+      `${API_BASE_URL}/api/notifications/${notificationId}?userId=${encodeURIComponent(userId)}`,
       {
         method: "DELETE",
       }
@@ -254,7 +255,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
     if (res.status === 404) {
       res = await fetch(
-        `http://localhost:8080/api/notifications/${notificationId}/delete?userId=${encodeURIComponent(userId)}`,
+        `${API_BASE_URL}/api/notifications/${notificationId}/delete?userId=${encodeURIComponent(userId)}`,
         {
           method: "PUT",
         }

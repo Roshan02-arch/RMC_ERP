@@ -12,6 +12,7 @@ import {
 import { toast } from "react-toastify";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../../api/api";
+import { calculateQuotationTotals, extractQuotationDistance } from "../../utils/quotationPricing";
 
 declare global {
   interface Window {
@@ -48,6 +49,11 @@ type ExistingOrderPaymentState = {
   existingAmount?: number;
   existingAddress?: string;
   existingDeliveryDate?: string;
+  quotation?: {
+    id?: number | string;
+    distance?: number;
+    distanceKm?: number;
+  };
 };
 
 type PaymentMethod = "ONLINE" | "CASH_ON_DELIVERY" | "PAY_LATER";
@@ -83,6 +89,7 @@ type PaymentMethodCardProps = {
 
 type OrderSummaryCardProps = {
   subtotal: number;
+  distance: number;
   deliveryCharges: number;
   tax: number;
   totalAmount: number;
@@ -401,6 +408,7 @@ const PaymentMethodCard = ({
 
 const OrderSummaryCard = ({
   subtotal,
+  distance,
   deliveryCharges,
   tax,
   totalAmount,
@@ -425,10 +433,12 @@ const OrderSummaryCard = ({
         <span>Subtotal</span>
         <span className="font-semibold text-slate-900">{formatCurrency(subtotal)}</span>
       </div>
-      <div className="flex items-center justify-between">
-        <span>Delivery Charges</span>
-        <span className="font-semibold text-slate-900">{formatCurrency(deliveryCharges)}</span>
-      </div>
+      {deliveryCharges > 0 && (
+        <div className="flex items-center justify-between">
+          <span>Delivery Charges ({distance.toFixed(2)} km)</span>
+          <span className="font-semibold text-slate-900">{formatCurrency(deliveryCharges)}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <span>Tax (GST {GST_RATE}%)</span>
         <span className="font-semibold text-slate-900">{formatCurrency(tax)}</span>
@@ -459,6 +469,13 @@ const CheckoutPayment = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const paymentState = ((location.state as ExistingOrderPaymentState | null) || null);
+  const checkoutState = ((location.state as {
+    quotation?: {
+      id?: number | string;
+      distance?: number;
+      distanceKm?: number;
+    };
+  } | null) || null);
   const queryOrderId = searchParams.get("orderId") || "";
   const existingOrderId = paymentState?.existingOrderId || queryOrderId || "";
   const [existingOrderAmount, setExistingOrderAmount] = useState<number>(Number(paymentState?.existingAmount || 0));
@@ -547,14 +564,38 @@ const CheckoutPayment = () => {
   }, [isExistingOrderPayment, location.state]);
 
   const [cart, setCart] = useState<CartItem[]>(initialCart);
+  const quotationFromState = checkoutState?.quotation || paymentState?.quotation || null;
+  const queryDistance = Number(searchParams.get("distance") || 0);
+  const distance = useMemo(() => {
+    const stateDistance = extractQuotationDistance(quotationFromState);
+    if (stateDistance > 0) {
+      return stateDistance;
+    }
+    return Number.isFinite(queryDistance) && queryDistance > 0 ? queryDistance : 0;
+  }, [quotationFromState, queryDistance]);
   const concreteItems = cart.filter((item) => item.itemType === "concrete");
   const materialItems = cart.filter((item) => item.itemType === "material");
   const subtotal = isExistingOrderPayment
     ? existingOrderAmount
     : cart.reduce((sum, item) => sum + item.pricePerUnit * item.quantity, 0);
-  const deliveryCharges = 0;
-  const tax = (subtotal * GST_RATE) / 100;
-  const totalAmount = subtotal + deliveryCharges + tax;
+  const totals = useMemo(
+    () => calculateQuotationTotals({ subtotal, distance, gstRate: GST_RATE }),
+    [distance, subtotal],
+  );
+  const deliveryCharges = totals.transport;
+  const tax = totals.gst;
+  const totalAmount = totals.total;
+
+  useEffect(() => {
+    console.log("Checkout calculation", {
+      quotation: quotationFromState,
+      distance,
+      subtotal,
+      transport: deliveryCharges,
+      gst: tax,
+      total: totalAmount,
+    });
+  }, [deliveryCharges, distance, quotationFromState, subtotal, tax, totalAmount]);
 
   const persistCart = (items: CartItem[]) => {
     setCart(items);
@@ -860,6 +901,7 @@ const CheckoutPayment = () => {
 
             <OrderSummaryCard
               subtotal={subtotal}
+              distance={distance}
               deliveryCharges={deliveryCharges}
               tax={tax}
               totalAmount={totalAmount}

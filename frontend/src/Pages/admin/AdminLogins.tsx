@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
@@ -17,7 +18,7 @@ const AdminLogins = () => {
 
   const fetchPendingAdmins = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/admin/admin-logins/pending");
+      const res = await fetch(`${API_BASE_URL}/api/admin/admin-logins/pending`);
       const data = await res.json();
       setPendingAdmins(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -35,7 +36,7 @@ const AdminLogins = () => {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/admin-logins/pending");
+        const res = await fetch(`${API_BASE_URL}/api/admin/admin-logins/pending`);
         const data = await res.json();
         if (mounted) {
           setPendingAdmins(Array.isArray(data) ? data : []);
@@ -53,7 +54,7 @@ const AdminLogins = () => {
   const handleDecision = async (userId: number, action: "approve" | "reject") => {
     try {
       const res = await fetch(
-        `http://localhost:8080/api/admin/admin-logins/${userId}/${action}`,
+        `${API_BASE_URL}/api/admin/admin-logins/${userId}/${action}`,
         { method: "PUT" }
       );
       const data = await res.json();

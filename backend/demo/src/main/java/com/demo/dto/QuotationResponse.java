@@ -22,6 +22,14 @@ public class QuotationResponse {
     private String gstNo;
     private String siteName;
     private String contactPerson;
+    private double distanceKm;
+    private String selectedPlant;
+    private double transportRatePerKm;
+    private double transportCharge;
+    private double overheadCharge;
+    private double commissionCharge;
+    private double gstCharge;
+    private double deliveryChargePerCum;
     private String requestNotes;
     private String termsAndConditions;
     private List<QuotationItemResponse> items = new ArrayList<>();
@@ -157,6 +165,70 @@ public class QuotationResponse {
 
     public void setContactPerson(String contactPerson) {
         this.contactPerson = contactPerson;
+    }
+
+    public double getDistanceKm() {
+        return distanceKm;
+    }
+
+    public void setDistanceKm(double distanceKm) {
+        this.distanceKm = distanceKm;
+    }
+
+    public String getSelectedPlant() {
+        return selectedPlant;
+    }
+
+    public void setSelectedPlant(String selectedPlant) {
+        this.selectedPlant = selectedPlant;
+    }
+
+    public double getTransportRatePerKm() {
+        return transportRatePerKm;
+    }
+
+    public void setTransportRatePerKm(double transportRatePerKm) {
+        this.transportRatePerKm = transportRatePerKm;
+    }
+
+    public double getTransportCharge() {
+        return transportCharge;
+    }
+
+    public void setTransportCharge(double transportCharge) {
+        this.transportCharge = transportCharge;
+    }
+
+    public double getOverheadCharge() {
+        return overheadCharge;
+    }
+
+    public void setOverheadCharge(double overheadCharge) {
+        this.overheadCharge = overheadCharge;
+    }
+
+    public double getCommissionCharge() {
+        return commissionCharge;
+    }
+
+    public void setCommissionCharge(double commissionCharge) {
+        this.commissionCharge = commissionCharge;
+    }
+
+    public double getGstCharge() {
+        return gstCharge;
+    }
+
+    public void setGstCharge(double gstCharge) {
+        this.gstCharge = gstCharge;
+    }
+
+    public double getDeliveryChargePerCum() {
+        return deliveryChargePerCum;
+    }
+
+    public void setDeliveryChargePerCum(double deliveryChargePerCum) {
+        this.deliveryChargePerCum = deliveryChargePerCum;
     }
 
     public String getRequestNotes() {

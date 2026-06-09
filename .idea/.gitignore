@@ -1,3 +1,9 @@
 # Default ignored files
 /shelf/
 /workspace.xml
+.env
+.env*.local
+.env.local
+.env.staging
+.env.production
+*.env

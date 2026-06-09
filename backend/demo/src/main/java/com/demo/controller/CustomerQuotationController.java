@@ -1,6 +1,7 @@
 package com.demo.controller;
 
 import com.demo.dto.QuotationRequest;
+import com.demo.dto.QuotationResponse;
 import com.demo.service.QuotationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +42,19 @@ public class CustomerQuotationController {
     public ResponseEntity<?> listMyRequests(@PathVariable Long userId) {
         try {
             return ResponseEntity.ok(quotationService.listByCustomer(userId));
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getMyQuotationById(@PathVariable Long id, @RequestParam Long userId) {
+        try {
+            QuotationResponse quotation = quotationService.getById(id);
+            if (quotation.getCustomerUserId() == null || !quotation.getCustomerUserId().equals(userId)) {
+                return ResponseEntity.status(403).body(Map.of("message", "You are not allowed to access this quotation"));
+            }
+            return ResponseEntity.ok(quotation);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
         }

@@ -1,4 +1,5 @@
 import { NavLink, Link, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../../api/api";
 import { useState } from "react";
 import axios from "axios";
 import { normalizeRole } from "../../utils/auth";
@@ -32,7 +33,7 @@ const ContactUsPage = () => {
   const handleSubmit = async () => {
     try {
       const response = await axios.post(
-        "http://localhost:8080/api/contact",
+        `${API_BASE_URL}/api/contact`,
         formData
       );
 

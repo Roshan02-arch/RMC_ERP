@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL } from "../api/api";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 
 type UserNavbarProps = {
@@ -49,9 +50,9 @@ const UserNavbar = ({ variant = "solid" }: UserNavbarProps) => {
 
     try {
       setLoadingProfile(true);
-      let res = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      let res = await fetch(`${API_BASE_URL}/api/users/${userId}/profile`);
       if (!res.ok) {
-        res = await fetch(`http://localhost:8080/api/users/${userId}`);
+        res = await fetch(`${API_BASE_URL}/api/users/${userId}`);
       }
       if (!res.ok) {
         throw new Error("Failed to load profile");

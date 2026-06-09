@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 import profileBg from "../../assets/background.png";
@@ -67,9 +68,9 @@ const CustomizeProfile = () => {
     setError("");
 
     try {
-      let response = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      let response = await fetch(`${API_BASE_URL}/api/users/${userId}/profile`);
       if (!response.ok) {
-        response = await fetch(`http://localhost:8080/api/users/${userId}`);
+        response = await fetch(`${API_BASE_URL}/api/users/${userId}`);
       }
       if (!response.ok) {
         throw new Error("Unable to load profile");
@@ -142,7 +143,7 @@ const CustomizeProfile = () => {
     setSaving(true);
     try {
       const primaryResponse = await fetch(
-        `http://localhost:8080/api/users/${userId}/profile`,
+        `${API_BASE_URL}/api/users/${userId}/profile`,
         {
           method: "PUT",
           headers: {
@@ -164,7 +165,7 @@ const CustomizeProfile = () => {
 
       if (!result.ok && (result.status === 404 || result.status === 405)) {
         const currentUserResponse = await fetch(
-          `http://localhost:8080/api/users/${userId}`
+          `${API_BASE_URL}/api/users/${userId}`
         );
         if (!currentUserResponse.ok) {
           const currentUserResult = await parseApiResult(
@@ -177,7 +178,7 @@ const CustomizeProfile = () => {
 
         const currentUser = await currentUserResponse.json();
         const legacyUpdateResponse = await fetch(
-          `http://localhost:8080/api/users/${userId}`,
+          `${API_BASE_URL}/api/users/${userId}`,
           {
             method: "PUT",
             headers: {

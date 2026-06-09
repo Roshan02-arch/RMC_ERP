@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 
@@ -132,7 +133,7 @@ const AdminFinance = () => {
       return;
     }
     const load = async () => {
-      const res = await fetch("http://localhost:8080/api/admin/orders");
+      const res = await fetch(`${API_BASE_URL}/api/admin/orders`);
       const data = await res.json();
       const rows: Order[] = Array.isArray(data) ? data : [];
       rows.sort((a, b) => b.id - a.id);
@@ -142,7 +143,7 @@ const AdminFinance = () => {
       const pairs = await Promise.all(
         rows.map(async (o) => {
           try {
-            const r = await fetch(`http://localhost:8080/api/orders/${o.orderId}/payments`);
+            const r = await fetch(`${API_BASE_URL}/api/orders/${o.orderId}/payments`);
             if (!r.ok) return [o.orderId, [] as PaymentRecord[]] as const;
             const p = await r.json();
             return [o.orderId, Array.isArray(p) ? p as PaymentRecord[] : []] as const;

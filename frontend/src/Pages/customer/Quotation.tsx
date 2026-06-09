@@ -4,17 +4,12 @@ import jsPDF from "jspdf";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../../api/api";
 import quotationLogo from "../../images/quotation-logo.svg";
+import { calculateQuotationTotals, extractQuotationDistance } from "../../utils/quotationPricing";
 
 type RequestItem = {
   rowKey: string;
   productName: string;
   quantity: number;
-};
-
-type ProductStock = {
-  id: number;
-  name: string;
-  pricePerUnit: number;
 };
 
 type QuotationRowItem = {
@@ -41,6 +36,11 @@ type QuotationRecord = {
   taxAmount: number;
   discountAmount: number;
   totalAmount: number;
+  address?: string;
+  contact?: string;
+  siteName?: string;
+  distanceKm?: number;
+  distance?: number;
   createdAt?: string;
   updatedAt?: string;
   approvedAt?: string;
@@ -290,6 +290,11 @@ const parseQuotationRecord = (row: unknown): QuotationRecord => {
     taxAmount: Number(source.taxAmount || 0),
     discountAmount: Number(source.discountAmount || 0),
     totalAmount: Number(source.totalAmount || 0),
+    address: String(source.address || ""),
+    contact: String(source.contact || ""),
+    siteName: String(source.siteName || ""),
+    distanceKm: Number(source.distanceKm || 0),
+    distance: Number(source.distance || source.distanceKm || 0),
     createdAt: String(source.createdAt || ""),
     updatedAt: String(source.updatedAt || ""),
     approvedAt: String(source.approvedAt || ""),
@@ -372,15 +377,18 @@ const Quotation = () => {
     return Number(selectedRow.subTotalAmount || 0);
   }, [selectedRow, productPriceMap]);
 
-  const selectedGst18 = useMemo(() => {
-    return (selectedSubTotal * 18) / 100;
-  }, [selectedSubTotal]);
-
   const selectedDiscount = useMemo(() => Number(selectedRow?.discountAmount || 0), [selectedRow]);
+  const selectedDistance = useMemo(() => extractQuotationDistance(selectedRow), [selectedRow]);
+  const selectedTotals = useMemo(
+    () => calculateQuotationTotals({ subtotal: selectedSubTotal, distance: selectedDistance, discount: selectedDiscount }),
+    [selectedDiscount, selectedDistance, selectedSubTotal],
+  );
+  const selectedTransport = selectedTotals.transport;
+  const selectedGst18 = selectedTotals.gst;
 
   const selectedGrandTotal = useMemo(() => {
-    return Math.max(0, selectedSubTotal + selectedGst18 - selectedDiscount);
-  }, [selectedDiscount, selectedGst18, selectedSubTotal]);
+    return selectedTotals.total;
+  }, [selectedTotals]);
 
   const pdfSubTotal = useMemo(() => {
     if (!pdfRecord) {
@@ -393,15 +401,18 @@ const Quotation = () => {
     return Number(pdfRecord.subTotalAmount || 0);
   }, [pdfRecord, productPriceMap]);
 
-  const pdfGst18 = useMemo(() => {
-    return (pdfSubTotal * 18) / 100;
-  }, [pdfSubTotal]);
-
   const pdfDiscount = useMemo(() => Number(pdfRecord?.discountAmount || 0), [pdfRecord]);
+  const pdfDistance = useMemo(() => extractQuotationDistance(pdfRecord), [pdfRecord]);
+  const pdfTotals = useMemo(
+    () => calculateQuotationTotals({ subtotal: pdfSubTotal, distance: pdfDistance, discount: pdfDiscount }),
+    [pdfDiscount, pdfDistance, pdfSubTotal],
+  );
+  const pdfTransport = pdfTotals.transport;
+  const pdfGst18 = pdfTotals.gst;
 
   const pdfGrandTotal = useMemo(() => {
-    return Math.max(0, pdfSubTotal + pdfGst18 - pdfDiscount);
-  }, [pdfDiscount, pdfGst18, pdfSubTotal]);
+    return pdfTotals.total;
+  }, [pdfTotals]);
 
   const showToast = (text: string, type: "success" | "error" | "info" = "info") => {
     setToast({ text, type });
@@ -491,12 +502,17 @@ const Quotation = () => {
     setLoadingRows(true);
     setError("");
     try {
-      const response = await fetch(`${API_BASE_URL}/api/quotation/my/${encodeURIComponent(String(userId))}`);
+      console.log("User fetch quotation list", { userId });
+      const response = await fetch(`${API_BASE_URL}/api/quotation/my/${encodeURIComponent(String(userId))}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = await parseResponseBody(response);
       if (!response.ok) {
         throw new Error(String((data as { message?: string })?.message || "Unable to load quotations"));
       }
       const parsed = Array.isArray(data) ? data.map(parseQuotationRecord) : [];
+      console.log("User quotation list loaded", { count: parsed.length, ids: parsed.map((r) => r.id) });
       setRows(parsed);
       const refId = (searchParams.get("ref") || "").trim().toUpperCase();
       const matchedByRef = refId
@@ -532,6 +548,42 @@ const Quotation = () => {
     }, 30000);
     return () => window.clearInterval(interval);
   }, [userId]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (activeTab === "my") {
+        void fetchMyRows();
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [activeTab, userId]);
+
+  useEffect(() => {
+    if (activeTab === "my") {
+      void fetchMyRows();
+    }
+  }, [activeTab]);
+
+  const fetchLatestQuotationById = async (quotationId: number) => {
+    const response = await fetch(`${API_BASE_URL}/api/quotation/${quotationId}?userId=${encodeURIComponent(String(userId))}`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    });
+    let data = await parseResponseBody(response);
+    if (!response.ok) {
+      const fallback = await fetch(`${API_BASE_URL}/api/admin/quotation/${quotationId}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
+      const fallbackData = await parseResponseBody(fallback);
+      if (!fallback.ok) {
+        throw new Error(String((data as { message?: string })?.message || "Unable to load latest quotation"));
+      }
+      data = fallbackData;
+    }
+    return parseQuotationRecord(data);
+  };
 
   const setTab = (tab: "request" | "my") => {
     setActiveTab(tab);
@@ -714,6 +766,10 @@ const Quotation = () => {
   }, [searchParams, selectedRow, setSearchParams]);
 
   const openQuotationPdf = async (row: QuotationRecord) => {
+    if (!row || !row.items || row.items.length === 0) {
+      throw new Error("Cannot generate PDF: quotation has no items.");
+    }
+    console.log("Quotation Data:", row);
     setPdfLoading(true);
     setPdfRecord(row);
 
@@ -817,11 +873,13 @@ const Quotation = () => {
 
     try {
       setSelectedRowId(row.id);
+      const latestRow = await fetchLatestQuotationById(row.id);
+      console.log("Latest quotation fetched before PDF", { id: latestRow.id, quotationNumber: latestRow.quotationNumber });
       if (normalizeStatus(row.status) === "QUOTATION_SENT") {
         await markReviewed(row.id);
         await fetchMyRows();
       }
-      await openQuotationPdf(row);
+      await openQuotationPdf(latestRow);
       showToast("Quotation opened successfully.", "success");
     } catch (viewError) {
       const msg = viewError instanceof Error ? viewError.message : "Unable to open quotation PDF";
@@ -1130,6 +1188,7 @@ const Quotation = () => {
 
                 <div className="grid gap-2 text-sm text-gray-700 md:grid-cols-2">
                   <p><span className="font-semibold text-gray-900">Sub Total:</span> {money(selectedSubTotal)}</p>
+                  {selectedTransport > 0 && <p><span className="font-semibold text-gray-900">Transport:</span> {money(selectedTransport)}</p>}
                   <p><span className="font-semibold text-gray-900">GST (18%):</span> {money(selectedGst18)}</p>
                   <p><span className="font-semibold text-gray-900">Discount:</span> {money(selectedDiscount)}</p>
                   <p><span className="font-semibold text-gray-900">Total Amount:</span> {money(selectedGrandTotal)}</p>
@@ -1187,7 +1246,7 @@ const Quotation = () => {
                 <p className="border-b border-black pb-1">{pdfRecord.address || "-"}</p>
                 <p><span className="font-semibold">Kind Attn:</span> {pdfRecord.customerName || "-"}</p>
                 <p><span className="font-semibold">MO No:</span> {pdfRecord.contact || "-"}</p>
-                <p><span className="font-semibold">Site Location:</span> {pdfRecord.requestNotes || pdfRecord.termsAndConditions || "-"}</p>
+                <p><span className="font-semibold">Site Location:</span> {pdfRecord.siteName || pdfRecord.requestNotes || pdfRecord.termsAndConditions || "-"}</p>
               </div>
               <div className="space-y-2 text-right">
                 <p><span className="font-semibold">Qtn. No.:</span> <span className="border-b border-black pb-1">{pdfRecord.quotationNumber || "-"}</span></p>
@@ -1230,6 +1289,7 @@ const Quotation = () => {
 
             <div className="mt-4 ml-auto w-[320px] space-y-1 text-[12px]">
               <p className="flex justify-between"><span>Sub Total:</span><span>{money(pdfSubTotal)}</span></p>
+              {pdfTransport > 0 && <p className="flex justify-between"><span>Transport:</span><span>{money(pdfTransport)}</span></p>}
               <p className="flex justify-between"><span>GST (18%):</span><span>{money(pdfGst18)}</span></p>
               <p className="flex justify-between"><span>Discount:</span><span>{money(pdfDiscount)}</span></p>
               <p className="flex justify-between border-t border-black pt-1 font-bold"><span>Total Amount:</span><span>{money(pdfGrandTotal)}</span></p>

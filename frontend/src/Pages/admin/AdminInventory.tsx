@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
@@ -46,7 +47,7 @@ type ProductStock = {
   updatedAt: string;
 };
 
-const API = "http://localhost:8080/api/admin/inventory";
+const API = `${API_BASE_URL}/api/admin/inventory`;
 const MIN_STOCK_ALERT_THRESHOLD = 5;
 const CEMENT_BRANDS = [
   "UltraTech",
@@ -471,7 +472,7 @@ const AdminInventory = () => {
         });
       }
       if (!res.ok && res.status === 404) {
-        res = await fetch(`http://localhost:8080/api/inventory/products/${product.id}`, {
+        res = await fetch(`${API_BASE_URL}/api/inventory/products/${product.id}`, {
           method: "DELETE",
         });
       }

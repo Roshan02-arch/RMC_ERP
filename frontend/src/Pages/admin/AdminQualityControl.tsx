@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -95,7 +96,7 @@ type MixCostCalculation = {
   };
 };
 
-const API = "http://localhost:8080/api/quality";
+const API = `${API_BASE_URL}/api/quality`;
 
 const numberFieldClass = "w-full px-3 py-2 border border-gray-300 rounded-md text-sm";
 

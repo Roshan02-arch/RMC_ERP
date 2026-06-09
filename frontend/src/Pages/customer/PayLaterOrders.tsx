@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useLocation, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 
@@ -83,7 +84,7 @@ const PayLaterOrders = () => {
 
     const load = async () => {
       try {
-        const res = await fetch(`http://localhost:8080/api/orders/my-orders/${userId}`);
+        const res = await fetch(`${API_BASE_URL}/api/orders/my-orders/${userId}`);
         if (!res.ok) {
           throw new Error("Failed to load orders");
         }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 
 interface User {
@@ -16,7 +17,7 @@ const AdminUsers = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/admin/users");
+      const res = await fetch(`${API_BASE_URL}/api/admin/users`);
       const data = await res.json();
       setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -34,7 +35,7 @@ const AdminUsers = () => {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/users");
+        const res = await fetch(`${API_BASE_URL}/api/admin/users`);
         const data = await res.json();
         if (mounted) {
           setUsers(Array.isArray(data) ? data : []);

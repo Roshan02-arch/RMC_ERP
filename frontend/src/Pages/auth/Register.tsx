@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import type { FormEvent } from "react";
 import axios from "axios";
 import { NavLink, Link, useNavigate } from "react-router-dom";
@@ -1041,7 +1042,7 @@ function Register() {
 
     try {
       const response = await axios.post(
-        "http://localhost:8080/api/users/register",
+        `${API_BASE_URL}/api/users/register`,
         {
           name,
           email,

@@ -1,4 +1,5 @@
-﻿import { useState } from "react";
+import { useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import forgotBg from "../../assets/forgot-bg.png";
@@ -24,7 +25,7 @@ function ForgotPassword() {
     try {
       setLoading(true);
       const response = await axios.post(
-        "http://localhost:8080/api/users/forgot-password",
+        `${API_BASE_URL}/api/users/forgot-password`,
         {
           email: email.trim(),
         }
@@ -202,7 +203,7 @@ function ForgotPassword() {
               onClick={() => navigate("/login")}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition"
             >
-              ← Back to Login
+              ? Back to Login
             </button>
           </div>
         </div>

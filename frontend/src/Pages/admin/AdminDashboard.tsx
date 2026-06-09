@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 
 interface Order {
@@ -25,7 +26,7 @@ const AdminDashboard = () => {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/admin/orders");
+      const res = await fetch(`${API_BASE_URL}/api/admin/orders`);
       const data = await res.json();
       setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -43,7 +44,7 @@ const AdminDashboard = () => {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/orders");
+        const res = await fetch(`${API_BASE_URL}/api/admin/orders`);
         const data = await res.json();
         if (mounted) {
           setOrders(Array.isArray(data) ? data : []);
@@ -61,7 +62,7 @@ const AdminDashboard = () => {
   const deleteOrder = async (orderId: string) => {
     try {
       setIsDeleting(true);
-      const res = await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(orderId)}`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/orders/${encodeURIComponent(orderId)}`, {
         method: "DELETE",
       });
 

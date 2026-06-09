@@ -10,6 +10,8 @@ import com.demo.entity.QuotationItem;
 import com.demo.entity.User;
 import com.demo.repository.QuotationRepository;
 import com.demo.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 public class QuotationServiceImpl implements QuotationService {
 
     private static final Set<String> OPEN_STATUSES = Set.of("PENDING", "APPROVED", "DRAFT", "QUOTATION_SENT", "CUSTOMER_REVIEWED");
+    private static final Logger log = LoggerFactory.getLogger(QuotationServiceImpl.class);
 
     @Autowired
     private QuotationRepository quotationRepository;
@@ -39,6 +42,8 @@ public class QuotationServiceImpl implements QuotationService {
     @Override
     @Transactional
     public QuotationResponse create(QuotationRequest request) {
+        log.info("Admin create quotation requested. requestId={}, quotationNumber={}, customerName={}",
+                request.getRequestId(), request.getQuotationNumber(), request.getCustomerName());
         String quotationNumber = normalize(request.getQuotationNumber());
         if (quotationNumber.isEmpty()) {
             quotationNumber = generateQuotationNumber();
@@ -57,6 +62,8 @@ public class QuotationServiceImpl implements QuotationService {
         quotation.setStatus(normalizeStatus(request.getStatus()).isEmpty() ? "DRAFT" : normalizeStatus(request.getStatus()));
         applyRequest(quotation, request, true);
         Quotation saved = quotationRepository.save(quotation);
+        log.info("Admin create quotation saved. id={}, quotationNumber={}, updatedAt={}",
+                saved.getId(), saved.getQuotationNumber(), saved.getUpdatedAt());
         return toResponse(saved);
     }
 
@@ -92,6 +99,7 @@ public class QuotationServiceImpl implements QuotationService {
         if (userId == null || userId <= 0) {
             throw new RuntimeException("Invalid userId");
         }
+        log.info("Customer quotation fetch requested. userId={}", userId);
         List<QuotationResponse> response = new ArrayList<>();
         for (Quotation quotation : quotationRepository.findByCustomerUserIdOrderByCreatedAtDesc(userId)) {
             QuotationResponse item = toResponse(quotation);
@@ -100,6 +108,7 @@ public class QuotationServiceImpl implements QuotationService {
             }
             response.add(item);
         }
+        log.info("Customer quotation fetch completed. userId={}, count={}", userId, response.size());
         return response;
     }
 
@@ -113,6 +122,7 @@ public class QuotationServiceImpl implements QuotationService {
     @Override
     @Transactional
     public QuotationResponse update(Long id, QuotationRequest request) {
+        log.info("Admin update quotation requested. id={}, quotationNumber={}", id, request.getQuotationNumber());
         Quotation quotation = quotationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Quotation not found"));
         if (normalizeStatus(quotation.getStatus()).equals("APPROVED")) {
@@ -120,6 +130,8 @@ public class QuotationServiceImpl implements QuotationService {
         }
         applyRequest(quotation, request, false);
         Quotation saved = quotationRepository.save(quotation);
+        log.info("Admin update quotation saved. id={}, quotationNumber={}, updatedAt={}",
+                saved.getId(), saved.getQuotationNumber(), saved.getUpdatedAt());
         return toResponse(saved);
     }
 
@@ -294,6 +306,7 @@ public class QuotationServiceImpl implements QuotationService {
     @Override
     @Transactional
     public QuotationResponse sendQuotation(Long id, Long adminUserId, QuotationRequest request) {
+        log.info("Admin send quotation requested. id={}, adminUserId={}", id, adminUserId);
         validateAdmin(adminUserId);
 
         Quotation quotation = quotationRepository.findById(id)
@@ -312,6 +325,8 @@ public class QuotationServiceImpl implements QuotationService {
         quotation.setSentAt(LocalDateTime.now());
 
         Quotation saved = quotationRepository.save(quotation);
+        log.info("Admin send quotation saved and sent. id={}, quotationNumber={}, sentAt={}",
+                saved.getId(), saved.getQuotationNumber(), saved.getSentAt());
         notifyCustomer(saved, NotificationType.QUOTATION_SENT, "New quotation received. Please review and accept/reject.");
         return toResponse(saved);
     }
@@ -426,6 +441,14 @@ public class QuotationServiceImpl implements QuotationService {
         quotation.setGstNo(normalize(request.getGstNo()));
         quotation.setSiteName(normalize(request.getSiteName()));
         quotation.setContactPerson(normalize(request.getContactPerson()));
+        quotation.setDistanceKm(safeNonNegative(request.getDistanceKm()));
+        quotation.setSelectedPlant(normalize(request.getSelectedPlant()));
+        quotation.setTransportRatePerKm(safeNonNegative(request.getTransportRatePerKm()));
+        quotation.setTransportCharge(safeNonNegative(request.getTransportCharge()));
+        quotation.setOverheadCharge(safeNonNegative(request.getOverheadCharge()));
+        quotation.setCommissionCharge(safeNonNegative(request.getCommissionCharge()));
+        quotation.setGstCharge(safeNonNegative(request.getGstCharge()));
+        quotation.setDeliveryChargePerCum(safeNonNegative(request.getDeliveryChargePerCum()));
         quotation.setRequestNotes(normalize(request.getRequestNotes()));
         quotation.setTermsAndConditions(normalize(request.getTermsAndConditions()));
 
@@ -473,6 +496,14 @@ public class QuotationServiceImpl implements QuotationService {
         response.setGstNo(quotation.getGstNo());
         response.setSiteName(quotation.getSiteName());
         response.setContactPerson(quotation.getContactPerson());
+        response.setDistanceKm(quotation.getDistanceKm());
+        response.setSelectedPlant(quotation.getSelectedPlant());
+        response.setTransportRatePerKm(quotation.getTransportRatePerKm());
+        response.setTransportCharge(quotation.getTransportCharge());
+        response.setOverheadCharge(quotation.getOverheadCharge());
+        response.setCommissionCharge(quotation.getCommissionCharge());
+        response.setGstCharge(quotation.getGstCharge());
+        response.setDeliveryChargePerCum(quotation.getDeliveryChargePerCum());
         response.setRequestNotes(quotation.getRequestNotes());
         response.setTermsAndConditions(quotation.getTermsAndConditions());
         response.setApprovedAt(quotation.getApprovedAt());

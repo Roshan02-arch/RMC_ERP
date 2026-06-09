@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import { FiBell } from "react-icons/fi";
 import { toast } from "react-toastify";
@@ -241,7 +242,7 @@ const PurchaseProduct = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/inventory/products");
+      const response = await fetch(`${API_BASE_URL}/api/inventory/products`);
       const data: ProductStock[] = await response.json();
       const items = Array.isArray(data) ? data : [];
       setProducts(items);
@@ -285,7 +286,7 @@ const PurchaseProduct = () => {
 
   const fetchMaterials = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/inventory/raw-materials");
+      const response = await fetch(`${API_BASE_URL}/api/inventory/raw-materials`);
       const data: RawMaterial[] = await response.json();
       setMaterials(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -294,7 +295,7 @@ const PurchaseProduct = () => {
   };
 
   const fetchConcreteOrders = async (userId: string) => {
-    const response = await fetch(`http://localhost:8080/api/orders/my-orders/${userId}`);
+    const response = await fetch(`${API_BASE_URL}/api/orders/my-orders/${userId}`);
     if (!response.ok) throw new Error("Failed to fetch order history");
     const data: ConcreteOrder[] = await response.json();
     const items = Array.isArray(data) ? data : [];
@@ -304,7 +305,7 @@ const PurchaseProduct = () => {
 
   const fetchRawMaterialOrders = async (userId: string) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/inventory/raw-material-orders/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/api/inventory/raw-material-orders/${userId}`);
       if (!response.ok) {
         setMaterialOrders([]);
         return;
@@ -355,16 +356,16 @@ const PurchaseProduct = () => {
       setDeletingOrderId(order.id);
       let response: Response;
       if (order.orderId) {
-        response = await fetch(`http://localhost:8080/api/admin/orders/${encodeURIComponent(order.orderId)}`, {
+        response = await fetch(`${API_BASE_URL}/api/admin/orders/${encodeURIComponent(order.orderId)}`, {
           method: "DELETE",
         });
       } else {
-        response = await fetch(`http://localhost:8080/api/orders/${order.id}`, { method: "DELETE" });
+        response = await fetch(`${API_BASE_URL}/api/orders/${order.id}`, { method: "DELETE" });
       }
 
       // Fallback for older API behavior that deletes by numeric id.
       if (!response.ok && order.id) {
-        response = await fetch(`http://localhost:8080/api/orders/${order.id}`, { method: "DELETE" });
+        response = await fetch(`${API_BASE_URL}/api/orders/${order.id}`, { method: "DELETE" });
       }
 
       if (!response.ok) {
@@ -381,7 +382,7 @@ const PurchaseProduct = () => {
 
   const deleteMaterialOrder = async (order: RawMaterialOrder) => {
     if (!(await showConfirm(`Delete raw material order #${order.id}?`, "Confirm Delete", "Delete"))) return;
-    const response = await fetch(`http://localhost:8080/api/inventory/raw-material-orders/${order.id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/inventory/raw-material-orders/${order.id}`, {
       method: "DELETE",
     });
     if (!response.ok) {

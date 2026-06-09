@@ -1,11 +1,15 @@
 package com.demo.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.*;
 
 @Configuration
 public class CorsConfig {
+
+    @Value("${frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
     @Bean
     public WebMvcConfigurer corsConfigurer() {
@@ -14,10 +18,10 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOriginPatterns("*")  // allow all origins (DEV only)
+                        .allowedOrigins(frontendUrl.split(","))
                         .allowedMethods("*")
                         .allowedHeaders("*")
-                        .allowCredentials(false);   // IMPORTANT: false
+                        .allowCredentials(false);
             }
         };
     }

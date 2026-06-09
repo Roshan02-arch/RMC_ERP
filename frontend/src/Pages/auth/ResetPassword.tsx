@@ -1,4 +1,5 @@
-﻿import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../../api/api";
 import { useState } from "react";
 import axios from "axios";
 import forgotBg from "../../assets/forgot-bg.png";
@@ -36,7 +37,7 @@ function ResetPassword() {
     try {
       setLoading(true);
       const response = await axios.post(
-        "http://localhost:8080/api/users/verify-reset-otp",
+        `${API_BASE_URL}/api/users/verify-reset-otp`,
         {
           email: email.trim(),
           otp: otp.trim(),
@@ -73,7 +74,7 @@ function ResetPassword() {
     try {
       setLoading(true);
       const response = await axios.post(
-        "http://localhost:8080/api/users/reset-password",
+        `${API_BASE_URL}/api/users/reset-password`,
         {
           email: email.trim(),
           otp: otp.trim(),

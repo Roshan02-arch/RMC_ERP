@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate, useParams } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 
@@ -60,7 +61,7 @@ const PayLaterOrderDetails = () => {
     const load = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:8080/api/orders/my-orders/${userId}`);
+        const response = await fetch(`${API_BASE_URL}/api/orders/my-orders/${userId}`);
         if (!response.ok) throw new Error("Failed to load order details");
         const rows: PayLaterOrder[] = await response.json();
         const match = (Array.isArray(rows) ? rows : []).find(

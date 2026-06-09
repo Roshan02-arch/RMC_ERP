@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useLocation, useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { normalizeRole } from "../../utils/auth";
@@ -155,8 +156,8 @@ const BillingPayment = () => {
       try {
         setLoading(true);
         const [concreteRes, rawRes] = await Promise.all([
-          fetch(`http://localhost:8080/api/orders/my-orders/${userId}`),
-          fetch(`http://localhost:8080/api/inventory/raw-material-orders/${userId}`),
+          fetch(`${API_BASE_URL}/api/orders/my-orders/${userId}`),
+          fetch(`${API_BASE_URL}/api/inventory/raw-material-orders/${userId}`),
         ]);
 
         const [concreteData, rawData] = await Promise.all([concreteRes.json(), rawRes.json()]);
@@ -197,7 +198,7 @@ const BillingPayment = () => {
         const entries = await Promise.all(
           orders.map(async (order) => {
             try {
-              const response = await fetch(`http://localhost:8080/api/orders/${order.orderId}/payments`);
+              const response = await fetch(`${API_BASE_URL}/api/orders/${order.orderId}/payments`);
               if (!response.ok) {
                 return [order.orderId, []] as const;
               }

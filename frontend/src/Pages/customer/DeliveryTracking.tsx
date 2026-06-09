@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { normalizeRole } from "../../utils/auth";
 
@@ -98,8 +99,8 @@ const DeliveryTracking = () => {
       try {
         setLoading(true);
         const [concreteRes, rawRes] = await Promise.all([
-          fetch(`http://localhost:8080/api/orders/my-orders/${userId}`),
-          fetch(`http://localhost:8080/api/inventory/raw-material-orders/${userId}`),
+          fetch(`${API_BASE_URL}/api/orders/my-orders/${userId}`),
+          fetch(`${API_BASE_URL}/api/inventory/raw-material-orders/${userId}`),
         ]);
         const [concreteData, rawData] = await Promise.all([concreteRes.json(), rawRes.json()]);
         let concreteItems: Order[] = Array.isArray(concreteData) ? concreteData : [];
@@ -148,7 +149,7 @@ const DeliveryTracking = () => {
     const fetchTracking = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8080/api/delivery-tracking/orders/${selectedOrderId}?userId=${userId}`
+          `${API_BASE_URL}/api/delivery-tracking/orders/${selectedOrderId}?userId=${userId}`
         );
         if (!res.ok) {
           setTrackingView(null);

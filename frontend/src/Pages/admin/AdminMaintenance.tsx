@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 
 type DashboardStats = {
@@ -79,7 +80,7 @@ type PerformanceRow = {
   lastBreakdownAt?: string;
 };
 
-const API = "http://localhost:8080/api/admin/maintenance";
+const API = `${API_BASE_URL}/api/admin/maintenance`;
 
 const initialDashboard: DashboardStats = {
   totalSchedules: 0,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaClock, FaShoppingCart } from "react-icons/fa";
 import { normalizeRole } from "../../utils/auth";
@@ -81,8 +82,8 @@ const Dashboard = () => {
       try {
         const ts = Date.now();
         const [ordersRes, qualityRes] = await Promise.all([
-          fetch(`http://localhost:8080/api/orders/my-orders/${userId}?t=${ts}`, { cache: "no-store" }),
-          fetch(`http://localhost:8080/api/quality/my-orders/${userId}?t=${ts}`, { cache: "no-store" }),
+          fetch(`${API_BASE_URL}/api/orders/my-orders/${userId}?t=${ts}`, { cache: "no-store" }),
+          fetch(`${API_BASE_URL}/api/quality/my-orders/${userId}?t=${ts}`, { cache: "no-store" }),
         ]);
 
         if (!ordersRes.ok) {

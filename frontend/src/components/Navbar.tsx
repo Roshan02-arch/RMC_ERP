@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "../api/api";
 import { NavLink, useNavigate } from "react-router-dom";
 import { FaBell } from "react-icons/fa";
 import { normalizeRole } from "../utils/auth";
@@ -92,9 +93,9 @@ const Navbar = () => {
 
     try {
       setLoadingProfile(true);
-      let res = await fetch(`http://localhost:8080/api/users/${userId}/profile`);
+      let res = await fetch(`${API_BASE_URL}/api/users/${userId}/profile`);
       if (!res.ok) {
-        res = await fetch(`http://localhost:8080/api/users/${userId}`);
+        res = await fetch(`${API_BASE_URL}/api/users/${userId}`);
       }
       if (!res.ok) {
         throw new Error("Failed to load profile");

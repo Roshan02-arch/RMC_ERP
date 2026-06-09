@@ -3,6 +3,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { API_BASE_URL } from "../../api/api";
 import quotationLogo from "../../images/quotation-logo.svg";
+import { calculateQuotationTotals, calculateTransport } from "../../utils/quotationPricing";
 
 type QuotationItem = {
   id?: number;
@@ -34,6 +35,14 @@ type QuotationRecord = {
   gstNo: string;
   siteName: string;
   contactPerson: string;
+  distanceKm: number;
+  selectedPlant: PlantCode;
+  transportRatePerKm: number;
+  transportCharge: number;
+  overheadCharge: number;
+  commissionCharge: number;
+  gstCharge: number;
+  deliveryChargePerCum: number;
   items: QuotationItem[];
   createdAt?: string;
   updatedAt?: string;
@@ -55,6 +64,14 @@ type QuotationForm = {
   gstNo: string;
   siteName: string;
   contactPerson: string;
+  distanceKm: number;
+  selectedPlant: PlantCode;
+  transportRatePerKm: number;
+  transportCharge: number;
+  overheadCharge: number;
+  commissionCharge: number;
+  gstCharge: number;
+  deliveryChargePerCum: number;
   items: QuotationItem[];
 };
 
@@ -72,6 +89,23 @@ type CustomerOption = {
 const NEW_CUSTOMER_KEY = "__new__";
 
 const defaultGrades = ["M-7.5", "M-10", "M-15", "M-20", "M-25", "M-30", "M-35", "M-40", "M-45", "M-50"];
+type PlantCode = "plant1" | "plant2";
+const TRANSPORT_RATE_PER_KM = 13.75;
+const roundToNearest50 = (value: number) => Math.round(value / 50) * 50;
+const PLANT_COST_COMPONENTS: Record<PlantCode, { label: string; overhead: number; commission: number; gst: number }> = {
+  plant1: {
+    label: "Plant 1 - Shinde Gaon MIDC, Nashik",
+    overhead: 700,
+    commission: 62.5,
+    gst: 300,
+  },
+  plant2: {
+    label: "Plant 2 - Adgaon, Nashik",
+    overhead: 600,
+    commission: 62.5,
+    gst: 300,
+  },
+};
 
 const money = (value: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -164,6 +198,14 @@ const emptyForm = (): QuotationForm => ({
   gstNo: "",
   siteName: "",
   contactPerson: "",
+  distanceKm: 0,
+  selectedPlant: "plant1",
+  transportRatePerKm: TRANSPORT_RATE_PER_KM,
+  transportCharge: 0,
+  overheadCharge: 0,
+  commissionCharge: 0,
+  gstCharge: 0,
+  deliveryChargePerCum: 0,
   items: defaultItems(),
 });
 
@@ -183,6 +225,14 @@ const mapRecordToForm = (record: QuotationRecord): QuotationForm => ({
   gstNo: record.gstNo || "",
   siteName: record.siteName || "",
   contactPerson: record.contactPerson || "",
+  distanceKm: Number(record.distanceKm || 0),
+  selectedPlant: record.selectedPlant || "plant1",
+  transportRatePerKm: Number(record.transportRatePerKm || TRANSPORT_RATE_PER_KM),
+  transportCharge: Number(record.transportCharge || 0),
+  overheadCharge: Number(record.overheadCharge || 0),
+  commissionCharge: Number(record.commissionCharge || 0),
+  gstCharge: Number(record.gstCharge || 0),
+  deliveryChargePerCum: Number(record.deliveryChargePerCum || 0),
   items: (record.items || []).map((item) => ({
     id: item.id,
     rowKey: makeRowKey(),
@@ -386,7 +436,9 @@ const QuotationSheet = ({
   onItemChange,
   onAddRow,
   onDeleteRow,
+  onAutoCalculateDelivery,
   formSubTotalAmount = 0,
+  formTransportAmount = 0,
   formTaxAmount = 0,
   formTotalAmount = 0,
 }: {
@@ -399,7 +451,9 @@ const QuotationSheet = ({
   onItemChange?: (rowKey: string, field: keyof QuotationItem, value: string | number) => void;
   onAddRow?: () => void;
   onDeleteRow?: (rowKey: string) => void;
+  onAutoCalculateDelivery?: () => void;
   formSubTotalAmount?: number;
+  formTransportAmount?: number;
   formTaxAmount?: number;
   formTotalAmount?: number;
 }) => {
@@ -493,6 +547,58 @@ const QuotationSheet = ({
         <p>
           <span className="font-semibold">Site Location:</span> {renderInlineField("siteName", "Site location", "text", "w-[260px]")}
         </p>
+        <div className="grid gap-2 md:grid-cols-2">
+          <p>
+            <span className="font-semibold">Distance (km):</span>{" "}
+            {readOnly ? (
+              <span>{Number(form.distanceKm || 0).toFixed(2)}</span>
+            ) : (
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.distanceKm}
+                onChange={(event) => onFieldChange?.("distanceKm", event.target.value)}
+                className="quotation-inline-field inline-block h-[26px] min-w-[120px] flex-none border-b border-black px-1 pb-[4px] pt-0 leading-tight align-bottom outline-none"
+              />
+            )}
+          </p>
+          <p>
+            <span className="font-semibold">Plant:</span>{" "}
+            {readOnly ? (
+              <span>{PLANT_COST_COMPONENTS[form.selectedPlant || "plant1"]?.label || "-"}</span>
+            ) : (
+              <select
+                value={form.selectedPlant}
+                onChange={(event) => onFieldChange?.("selectedPlant", event.target.value)}
+                className="quotation-inline-field inline-block h-[28px] min-w-[220px] rounded border border-black bg-white px-1 text-[12px] outline-none"
+              >
+                <option value="plant1">{PLANT_COST_COMPONENTS.plant1.label}</option>
+                <option value="plant2">{PLANT_COST_COMPONENTS.plant2.label}</option>
+              </select>
+            )}
+          </p>
+        </div>
+        <p>
+          <span className="font-semibold">Delivery Charge (per cum):</span> {money(Number(form.deliveryChargePerCum || 0))}
+        </p>
+        <p>
+          <span className="font-semibold">Transport:</span> {money(Number(formTransportAmount || 0))} |{" "}
+          <span className="font-semibold">Overhead:</span> {money(Number(form.overheadCharge || 0))} |{" "}
+          <span className="font-semibold">Commission:</span> {money(Number(form.commissionCharge || 0))} |{" "}
+          <span className="font-semibold">GST:</span> {money(Number(form.gstCharge || 0))}
+        </p>
+        {!readOnly && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={onAutoCalculateDelivery}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+            >
+              Auto Calculate Delivery Charges
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="mb-5 text-[12px] leading-[1.55]">
@@ -597,6 +703,7 @@ const QuotationSheet = ({
 
       <div className="mt-4 ml-auto w-[360px] space-y-1 text-[12px]">
         <p className="flex justify-between"><span className="font-semibold">Sub Total:</span><span className="font-semibold">{formSubTotalAmount.toFixed(2)}</span></p>
+        {formTransportAmount > 0 && <p className="flex justify-between"><span className="font-semibold">Transport:</span><span className="font-semibold">{formTransportAmount.toFixed(2)}</span></p>}
         <p className="flex justify-between"><span className="font-semibold">GST (18%):</span><span className="font-semibold">{formTaxAmount.toFixed(2)}</span></p>
         <p className="flex justify-between"><span className="font-semibold">Discount:</span><span className="font-semibold">{Number(form.discountAmount || 0).toFixed(2)}</span></p>
         <p className="flex justify-between border-t-2 border-black pt-1 font-bold text-[13px]"><span>Total Amount:</span><span>{formTotalAmount.toFixed(2)}</span></p>
@@ -736,12 +843,23 @@ const AdminQuotation = () => {
     [form.items, recalculateItems],
   );
 
-  const formTaxAmount = useMemo(() => (formSubTotalAmount * 18) / 100, [formSubTotalAmount]);
-
-  const formTotalAmount = useMemo(
-    () => Math.max(0, formSubTotalAmount + formTaxAmount - Number(form.discountAmount || 0)),
-    [form.discountAmount, formTaxAmount, formSubTotalAmount],
+  const formTransportAmount = useMemo(
+    () => calculateTransport(Number(form.distanceKm || 0), Number(form.transportRatePerKm || TRANSPORT_RATE_PER_KM)),
+    [form.distanceKm, form.transportRatePerKm],
   );
+
+  const formTotals = useMemo(
+    () => calculateQuotationTotals({
+      subtotal: formSubTotalAmount,
+      distance: Number(form.distanceKm || 0),
+      transportRate: Number(form.transportRatePerKm || TRANSPORT_RATE_PER_KM),
+      discount: Number(form.discountAmount || 0),
+    }),
+    [form.discountAmount, form.distanceKm, form.transportRatePerKm, formSubTotalAmount],
+  );
+
+  const formTaxAmount = formTotals.gst;
+  const formTotalAmount = formTotals.total;
 
   const parseRecord = (raw: unknown): QuotationRecord => {
     const source = (raw ?? {}) as Record<string, unknown>;
@@ -766,6 +884,14 @@ const AdminQuotation = () => {
       gstNo: String(source.gstNo || ""),
       siteName: String(source.siteName || ""),
       contactPerson: String(source.contactPerson || ""),
+      distanceKm: Number(source.distanceKm || 0),
+      selectedPlant: String(source.selectedPlant || "plant1") === "plant2" ? "plant2" : "plant1",
+      transportRatePerKm: Number(source.transportRatePerKm || TRANSPORT_RATE_PER_KM),
+      transportCharge: Number(source.transportCharge || 0),
+      overheadCharge: Number(source.overheadCharge || 0),
+      commissionCharge: Number(source.commissionCharge || 0),
+      gstCharge: Number(source.gstCharge || 0),
+      deliveryChargePerCum: Number(source.deliveryChargePerCum || 0),
       items: recalculateItems(
         itemRows.map((entry) => {
           const row = entry as Record<string, unknown>;
@@ -1025,14 +1151,16 @@ const AdminQuotation = () => {
     const endpoint = mode === "create" || !form.id
       ? `${API_BASE_URL}/api/admin/quotation/create`
       : `${API_BASE_URL}/api/admin/quotation/update/${form.id}`;
+    const payload = {
+      ...buildPayload(),
+      status: "DRAFT",
+    };
+    console.log("Admin save quotation payload", payload);
 
     const response = await fetch(endpoint, {
       method: mode === "create" || !form.id ? "POST" : "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...buildPayload(),
-        status: "DRAFT",
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await parseApiBody(response);
@@ -1089,7 +1217,11 @@ const AdminQuotation = () => {
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildPayload()),
+          body: JSON.stringify((() => {
+            const payload = buildPayload();
+            console.log("Admin send quotation payload", payload);
+            return payload;
+          })()),
         },
       );
 
@@ -1183,11 +1315,78 @@ const AdminQuotation = () => {
     if (field === "customerName") {
       setSelectedCustomerKey(NEW_CUSTOMER_KEY);
     }
-    if (field === "discountAmount") {
+    if (
+      field === "discountAmount"
+      || field === "distanceKm"
+      || field === "transportRatePerKm"
+      || field === "transportCharge"
+      || field === "overheadCharge"
+      || field === "commissionCharge"
+      || field === "gstCharge"
+      || field === "deliveryChargePerCum"
+    ) {
       setForm((previous) => ({ ...previous, [field]: Number(value || 0) }));
       return;
     }
+    if (field === "selectedPlant") {
+      const nextPlant = value === "plant2" ? "plant2" : "plant1";
+      setForm((previous) => ({ ...previous, selectedPlant: nextPlant }));
+      return;
+    }
     setForm((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const applyDeliveryFormula = () => {
+    const distanceKm = Number(form.distanceKm || 0);
+    if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
+      const msg = "Please enter a valid distance in km before calculating delivery charges.";
+      setMessage(msg);
+      showToast(msg, "error");
+      return;
+    }
+
+    const selectedPlant = form.selectedPlant === "plant2" ? "plant2" : "plant1";
+    const component = PLANT_COST_COMPONENTS[selectedPlant];
+    const transportRate = Number(form.transportRatePerKm || TRANSPORT_RATE_PER_KM);
+    const transportCharge = calculateTransport(distanceKm, transportRate);
+    const deliveryChargePerCum = transportCharge + component.overhead + component.commission + component.gst;
+    console.log("Admin delivery formula", {
+      distanceKm,
+      transportRate,
+      transportCharge,
+      selectedPlant,
+      component,
+      deliveryChargePerCum,
+    });
+
+    setForm((previous) => {
+      const nextItems = previous.items.map((item) => {
+        const gradeKey = item.productName || item.grade || "";
+        const recipeTotal = Number(productPriceMap[normalizeProductKey(gradeKey)] || item.unitPrice || 0);
+        const roundedRecipeTotal = Math.round(recipeTotal);
+        const finalRate = roundToNearest50(roundedRecipeTotal + deliveryChargePerCum);
+        return {
+          ...item,
+          unitPrice: finalRate,
+          totalPrice: normalizeNumber(item.quantity) * finalRate,
+        };
+      });
+
+      return {
+        ...previous,
+        selectedPlant,
+        distanceKm,
+        transportRatePerKm: transportRate,
+        transportCharge,
+        overheadCharge: component.overhead,
+        commissionCharge: component.commission,
+        gstCharge: component.gst,
+        deliveryChargePerCum,
+        items: recalculateItems(nextItems),
+      };
+    });
+
+    showToast("Delivery charges applied using plant + distance formula.", "success");
   };
 
   const handleCustomerSelect = (customerKey: string) => {
@@ -1258,6 +1457,14 @@ const AdminQuotation = () => {
     subTotalAmount: formSubTotalAmount,
     taxAmount: formTaxAmount,
     discountAmount: Number(form.discountAmount || 0),
+    distanceKm: Number(form.distanceKm || 0),
+    selectedPlant: form.selectedPlant,
+    transportRatePerKm: Number(form.transportRatePerKm || TRANSPORT_RATE_PER_KM),
+    transportCharge: formTransportAmount,
+    overheadCharge: Number(form.overheadCharge || 0),
+    commissionCharge: Number(form.commissionCharge || 0),
+    gstCharge: Number(form.gstCharge || 0),
+    deliveryChargePerCum: Number(form.deliveryChargePerCum || 0),
     address: form.address.trim(),
     contact: form.contact.trim(),
     gstNo: form.gstNo.trim(),
@@ -1306,6 +1513,7 @@ const AdminQuotation = () => {
   };
 
   const renderRecordToPdf = async (record: QuotationRecord, sourceNode?: HTMLDivElement | null) => {
+    console.log("Quotation Data:", record);
     let source = sourceNode;
 
     if (!source) {
@@ -1478,8 +1686,17 @@ const AdminQuotation = () => {
         gstNo: form.gstNo,
         siteName: form.siteName,
         contactPerson: form.contactPerson,
+        distanceKm: Number(form.distanceKm || 0),
+        selectedPlant: form.selectedPlant,
+        transportRatePerKm: Number(form.transportRatePerKm || TRANSPORT_RATE_PER_KM),
+        transportCharge: formTransportAmount,
+        overheadCharge: Number(form.overheadCharge || 0),
+        commissionCharge: Number(form.commissionCharge || 0),
+        gstCharge: Number(form.gstCharge || 0),
+        deliveryChargePerCum: Number(form.deliveryChargePerCum || 0),
         items: recalculateItems(form.items),
       };
+      console.log("Quotation Data:", tempRecord);
       await renderRecordToPdf(tempRecord, visibleQuotationRef.current);
     } catch (error) {
       console.error(error);
@@ -1496,14 +1713,18 @@ const AdminQuotation = () => {
     const mapped = mapRecordToForm(pdfPreviewRecord);
     const items = recalculateItems(mapped.items);
     const subTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-    const taxAmount = (subTotal * 18) / 100;
-    const discountAmount = Number(mapped.discountAmount || 0);
-    const totalAmount = Math.max(0, subTotal + taxAmount - discountAmount);
+    const previewTotals = calculateQuotationTotals({
+      subtotal: subTotal,
+      distance: Number(mapped.distanceKm || 0),
+      transportRate: Number(mapped.transportRatePerKm || TRANSPORT_RATE_PER_KM),
+      discount: Number(mapped.discountAmount || 0),
+    });
     return {
       form: { ...mapped, items },
       subTotal,
-      taxAmount,
-      totalAmount,
+      transportAmount: previewTotals.transport,
+      taxAmount: previewTotals.gst,
+      totalAmount: previewTotals.total,
     };
   }, [pdfPreviewRecord, recalculateItems]);
 
@@ -1738,7 +1959,9 @@ const AdminQuotation = () => {
               onItemChange={updateItem}
               onAddRow={addRow}
               onDeleteRow={deleteRow}
+              onAutoCalculateDelivery={applyDeliveryFormula}
               formSubTotalAmount={formSubTotalAmount}
+              formTransportAmount={formTransportAmount}
               formTaxAmount={formTaxAmount}
               formTotalAmount={formTotalAmount}
             />
@@ -1753,6 +1976,7 @@ const AdminQuotation = () => {
               form={pdfPreviewData.form}
               readOnly
               formSubTotalAmount={pdfPreviewData.subTotal}
+              formTransportAmount={pdfPreviewData.transportAmount}
               formTaxAmount={pdfPreviewData.taxAmount}
               formTotalAmount={pdfPreviewData.totalAmount}
             />

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { normalizeRole } from "../../utils/auth";
@@ -69,7 +70,7 @@ const QualityAccess = () => {
     const load = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`http://localhost:8080/api/quality/my-orders/${userId}`);
+        const res = await fetch(`${API_BASE_URL}/api/quality/my-orders/${userId}`);
         const data = await res.json();
         const items = Array.isArray(data) ? data : [];
         setRows(items);

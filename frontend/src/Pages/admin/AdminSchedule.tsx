@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api/api";
 import { useNavigate } from "react-router-dom";
 import { useCenteredDialog } from "../../hooks/useCenteredDialog";
 
@@ -59,8 +60,8 @@ interface TripRecord {
   driverName?: string;
 }
 
-const API = "http://localhost:8080/api/admin";
-const TRACKING_API = "http://localhost:8080/api/delivery-tracking";
+const API = `${API_BASE_URL}/api/admin`;
+const TRACKING_API = `${API_BASE_URL}/api/delivery-tracking`;
 
 const AdminSchedule = () => {
   const navigate = useNavigate();
